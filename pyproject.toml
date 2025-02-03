@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sys-micro-pytools"
+version = "0.1.0a0"
+authors = [
+    { name="Tim Van De Looverbosch", email="tim.vandelooverbosch@gmail.com" },
+]
+description = "Utilities for data pre/post-processing in Python"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "tifffile",
+    "nd2reader",
+    "scikit-image",
+    "colorcet",
+    "tqdm",
+    "pyvista",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/tim-vdl/sys-micro-pytools"
+"Bug Tracker" = "https://github.com/tim-vdl/sys-micro-pytools/issues"
+
+[tool.setuptools.packages.find]
+include = ["sys_micro_pytools*"]
+exclude = ["demo*"]
