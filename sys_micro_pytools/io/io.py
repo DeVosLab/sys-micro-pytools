@@ -10,7 +10,7 @@ def read_nd2(filename, bundle_axes='cyx'):
             images = images[0]
         return images
     
-def read_tif_or_nd2(filename, bundle_axes: str = 'cyx'):
+def read_tiff_or_nd2(filename, bundle_axes: str = 'cyx'):
     filename = Path(filename)
     if filename.suffix == '.tif':
         img = tifffile.imread(str(filename))
