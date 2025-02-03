@@ -14,10 +14,10 @@ import colorcet as cc
 from matplotlib import pyplot as plt
 from matplotlib import colormaps
 
-from io import read_tif_or_nd2
+from io import read_tiff_or_nd2
 from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
 from preprocess.flat_field import get_flat_field_files, flat_field_correction
-from visualize.composite import create_composite2D
+from preprocess.composite import create_composite2D
 
 
 def create_palette(plate_layout: pd.DataFrame, hue_vars: Union[Tuple, List], cmap: str ='tab20', 
@@ -231,7 +231,7 @@ def create_grid_plot(
             else:
                 # Load image
                 filename = df_row_col['Filename'].values[idx]
-                img = read_tif_or_nd2(str(filename), bundle_axes='cyx' if \
+                img = read_tiff_or_nd2(str(filename), bundle_axes='cyx' if \
                                       img_type == 'multi_channel' else 'yx').astype(float)
             
             if flat_field is not None and img_type != 'mask':

@@ -7,11 +7,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
 
-from io import read_tif_or_nd2
+from io import read_tiff_or_nd2
 from preprocess.flat_field import flat_field_correction
 from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
 
-from visualize.composite import create_composite2D
+from preprocess.composite import create_composite
 
 
 def main(**kwargs):
@@ -72,7 +72,7 @@ def main(**kwargs):
         if kwargs['patterns2have'] is not None and not any([x in str(file.stem) for x in kwargs['patterns2have']]):
             continue
 
-        img = read_tif_or_nd2(file, bundle_axes='cyx' if not kwargs['grayscale'] else 'yx').astype(float)
+        img = read_tiff_or_nd2(file, bundle_axes='cyx' if not kwargs['grayscale'] else 'yx').astype(float)
         
         if flat_field is not None:
             img = flat_field_correction(img, flat_field)
@@ -101,7 +101,7 @@ def main(**kwargs):
                 pmax_vals=pmax_vals if kwargs['ref_wells'] is not None else None,
                 clip=True
                 )
-            img_composite = create_composite2D(img_norm, channel_dim=0)
+            img_composite = create_composite(img_norm, channel_dim=0)
         
         # Save channel plots
         if 'channels' in kwargs['output_type']:
