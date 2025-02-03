@@ -206,8 +206,7 @@ def plot_layout(df, selected_plate, row_categories=None, col_categories=None, va
 
 
 def parse_args():
-    parser = ArgumentParser(description=("Merge multiple 96 well plate layouts into a "
-                                         "single dataframe and plot the layout of a specified plate."))
+    parser = ArgumentParser(description=("Convert a plate layout as a list in a .csv file from a plate layout provided in a .xlsx file(s)."))
     parser.add_argument('-i', '--input_path', type=str, required=True, nargs='+',
                         help="Path to the CSV or Excel file(s) containing the plate layouts.")
     parser.add_argument('-o', '--output_path', type=str, required=False, default=None,
