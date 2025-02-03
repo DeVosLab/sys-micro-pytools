@@ -29,6 +29,19 @@ class SurfaceAttributes:
     metallic: float = 0.8
     diffuse: float = 1.0
     specular: float = 0.5
+    
+    def __init__(self, **kwargs):
+        # Set default values first
+        self.color = 'white'
+        self.opacity = 1.0
+        self.pbr = True
+        self.metallic = 0.8
+        self.diffuse = 1.0
+        self.specular = 0.5
+        
+        # Update with any provided values and add new attributes
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 @dataclass
 class RenderSettings:
@@ -200,88 +213,6 @@ def labels2surface3D(masks: Union[np.ndarray, List[np.ndarray]], scale: tuple=(1
         surfaces[lbl] = surface
     return surfaces
 
-
-filename = "/Users/timvdl/Downloads/Composite.tif"
-img = tifffile.imread(filename).astype(float)
-img = np.moveaxis(img, 0, 1)
-C, Z, Y, X = img.shape
-print(img.shape)
-
-# Normalize channels
-pmin, pmax = 0.1, 99.9
-for c in range(C):
-    pmin_val, pmax_val = np.percentile(img[c,], (pmin, pmax))
-    img[c,] = (img[c,] - pmin_val) / (pmax_val - pmin_val)
-
-
-cyto_channel = 0
-mito_channel = 1
-nuclei_channel = 2
-nuclei_img = img[nuclei_channel, :, :, :]
-mito_img = img[mito_channel, :, :, :]
-cyto_img = img[cyto_channel, :, :, :]
-
-# Nuclei segmentation
-nuclei_img = median_filter(nuclei_img, size=3)
-nuclei_img_bw = nuclei_img > threshold_otsu(nuclei_img)
-nuclei_img_bw = remove_small_objects(nuclei_img_bw, min_size=500)
-nuclei_img_bw = clear_border(nuclei_img_bw)
-nuclei_img_bw = binary_closing(nuclei_img_bw, footprint=np.ones((3, 3, 3)))
-nuclei_img_bw = binary_opening(nuclei_img_bw, footprint=np.ones((2, 2, 2)))
-nuclei_img_bw = binary_fill_holes(nuclei_img_bw)
-nuclei_masks = label(nuclei_img_bw)
-
-# Mitochondria segmentation
-mito_img = median_filter(mito_img, size=3)
-mito_img_bw = mito_img > threshold_otsu(mito_img)
-mito_img_bw = remove_small_objects(mito_img_bw, min_size=10)
-mito_img_bw = clear_border(mito_img_bw)
-mito_img_bw = binary_closing(mito_img_bw, footprint=np.ones((1, 1, 1)))
-mito_img_bw = binary_opening(mito_img_bw, footprint=np.ones((1, 1, 1)))
-mito_img_bw = binary_fill_holes(mito_img_bw)
-mito_masks = label(mito_img_bw)
-
-# Cytoplasm segmentation
-cyto_img = median_filter(cyto_img, size=3)
-
-# Remove background above and below monolayer
-cyto_masks = tifffile.imread("/Users/timvdl/Downloads/cyto_masks.tif")
-cyto_masks = cyto_masks == 2
-cyto_masks = binary_dilation(cyto_masks, footprint=ball(3))
-
-nuclei_masks = np.where(cyto_masks, nuclei_masks, 0)
-nuclei_masks = binary_erosion(nuclei_masks, footprint=ball(1)) > 0
-nuclei_masks = remove_small_objects(nuclei_masks, min_size=1000)
-mito_masks = np.where(cyto_masks, mito_masks, 0) > 0
-
-
-masks = np.zeros_like(cyto_masks, dtype=int)
-masks = np.where(cyto_masks, 3, masks)
-masks = np.where(nuclei_masks, 1, masks)
-masks = np.where(mito_masks, 2, masks)
-
-
-print(np.unique(masks))
-
-surfaces = labels2surface3D(masks, scale=(0.29, 0.26, 0.26))
-print(f"Surfaces: {surfaces.keys()}")
-
-render_settings = RenderSettings(
-    background_color=(0.9, 0.9, 0.9),
-    lighting="three lights",
-    show_axes=True,
-    axes_line_width=5,
-    axes_labels=False
-)
-
-surface_attributes = {
-    1: SurfaceAttributes(color="cyan", opacity=0.9, pbr=True, metallic=0.8, diffuse=1, specular=0.5),
-    2: SurfaceAttributes(color="yellow", opacity=0.9, pbr=True, metallic=0.8, diffuse=1, specular=0.5),
-    3: SurfaceAttributes(color="magenta", opacity=0.5, pbr=True, metallic=0.8, diffuse=1, specular=0.5)
-}
-
-#render_surfaces(surfaces, render_settings, surface_attributes, opacity=0.9)
-
 def animate_surfaces(
     surfaces: Dict[int, pv.PolyData],
     transformations: Dict[int, List[Callable]],
@@ -290,7 +221,8 @@ def animate_surfaces(
     surface_attributes: Optional[Dict[int, SurfaceAttributes]] = None,
     opacity: Optional[float] = None,
     output_path: str = "animation.gif",
-    camera_position: str = "3d"
+    camera_position: str = "3d",
+    bounds: Optional[Tuple[float, float, float, float, float, float]] = None
 ) -> None:
     """Animate surfaces with specified transformations."""
     if render_settings is None:
@@ -333,6 +265,11 @@ def animate_surfaces(
             labels_off=not render_settings.axes_labels
         )
     
+    # Set bounds
+    if bounds is not None:
+        plotter.add_mesh(pv.Box(bounds=bounds), opacity=0, color='white')
+    
+    # Set camera position
     plotter.camera_position = camera_position
 
     # Open a gif
@@ -345,28 +282,29 @@ def animate_surfaces(
             if label in transformations:
                 # Apply transformations for this label
                 current_surface = surface.copy()
+                if surface_attributes and label in surface_attributes:
+                    current_attrs = surface_attributes[label]
+                else:
+                    current_attrs = default_attributes
+                    current_attrs.color = color_mapping[label]
                 for transform_func in transformations[label]:
-                    current_surface = transform_func(current_surface, frame, n_frames)
+                    result = transform_func(current_surface, frame, n_frames)
+                    if isinstance(result, tuple):
+                        current_surface, transform_attr = result
+                        for key, value in transform_attr.items():
+                            setattr(current_attrs, key, value)
+                    else:
+                        current_surface = result
 
                 # Remove old actor and add new one
                 plotter.remove_actor(actors[label])
-                if surface_attributes and label in surface_attributes:
-                    attrs = surface_attributes[label]
-                else:
-                    attrs = default_attributes
-                    attrs.color = color_mapping[label]
                 
                 if opacity is not None:
-                    attrs.opacity = opacity
+                    current_attrs.opacity = opacity
                 
                 actors[label] = plotter.add_mesh(
                     current_surface,
-                    color=attrs.color,
-                    opacity=attrs.opacity,
-                    pbr=attrs.pbr,
-                    metallic=attrs.metallic,
-                    diffuse=attrs.diffuse,
-                    specular=attrs.specular
+                    **{attr: getattr(current_attrs, attr) for attr in vars(current_attrs)}
                 )
         
         # Write the frame
@@ -376,39 +314,103 @@ def animate_surfaces(
     plotter.close()
 
 # Example transformation functions
-def rotate(axis: Union[np.ndarray, List[float]], angle_degrees: float = 360, center: Union[np.ndarray, List[float]]=None):
+def rotate(axis: Union[np.ndarray, List[float]], degrees: float = 360, 
+          center: Union[np.ndarray, List[float], int]=None, speed_factor: float=1.0,
+          surfaces: Dict[int, pv.PolyData]=None):
+    """Create a rotation transformation with nonlinear speed control.
+    
+    Parameters
+    ----------
+    axis : Union[np.ndarray, List[float]]
+        Axis of rotation
+    degrees : float
+        Total angle to rotate in degrees
+    center : Union[np.ndarray, List[float], int]
+        Center of rotation. Can be:
+        - None: uses object's own center
+        - np.ndarray/List: specific coordinates
+        - int: ID of surface to use as center of rotation
+    speed_factor : float
+        Controls the nonlinearity of rotation speed:
+        - speed_factor = 1.0: linear (constant) rotation speed
+        - speed_factor < 1.0: rotation slows down over time
+        - speed_factor > 1.0: rotation accelerates over time
+    surfaces : Dict[int, pv.PolyData]
+        Dictionary of all surfaces, required if center is specified as surface ID
+    """
     axis = np.array(axis) / np.linalg.norm(axis)
-    def transform(surface: pv.PolyData, frame: int, total_frames: int, center: Union[np.ndarray, List[float]]=center) -> pv.PolyData:
-        # Get the center of the object
-        if center is None:
-            center = surface.center
+    if isinstance(center, int):
+        reference_id = center
+        fixed_center = None
+        initial_displacement = np.array(surfaces[reference_id].center) - np.array(center)
+    else:
+        reference_id = None
+        fixed_center = center
+        initial_displacement = None
+    
+    
+    def transform(surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
+        # Get the center of rotation
+        if reference_id is not None:
+            # Use the current position of the reference surface
+            rot_center = np.array(surface.center) - initial_displacement
+        elif fixed_center is not None:
+            rot_center = np.array(fixed_center)
         else:
-            center = np.array(center)
-        
+            rot_center = np.array(surface.center)
+
+        print(f'Frame {frame}: rot_center: {rot_center}')
+
         # Create a copy of the surface
         transformed = surface.copy()
         
         # Move to origin
-        translation = [-c for c in center]
+        translation = -rot_center
         transformed.translate(translation, inplace=True)
         
+        # Calculate nonlinear progress
+        linear_progress = frame / total_frames
+        nonlinear_progress = linear_progress ** speed_factor
+        current_angle = degrees * nonlinear_progress
+        
         # Rotate
-        progress = frame / total_frames
-        current_angle = angle_degrees * progress
         transformed.rotate_vector(axis, current_angle, inplace=True)
         
         # Move back to original position
-        transformed.translate(center, inplace=True)
+        translation = rot_center
+        transformed.translate(translation, inplace=True)
         
         return transformed
     return transform
 
-def translate(direction: Union[np.ndarray, List[float]], distance: float = 10):
+def translate(direction: Union[np.ndarray, List[float]], distance: float = 10, speed_factor: float = 1.0):
+    """Create a translation transformation with nonlinear speed control.
+    
+    Parameters
+    ----------
+    direction : Union[np.ndarray, List[float]]
+        Direction vector for translation
+    distance : float
+        Total distance to translate
+    speed_factor : float
+        Controls the nonlinearity of translation speed:
+        - speed_factor = 1.0: linear (constant) translation speed
+        - speed_factor < 1.0: translation slows down over time
+        - speed_factor > 1.0: translation accelerates over time
+    """
     direction = np.array(direction) / np.linalg.norm(direction)
     def transform(surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
-        progress = frame / total_frames
-        current_distance = distance * progress
+        # Calculate nonlinear progress
+        linear_progress = frame / total_frames
+        nonlinear_progress = linear_progress ** speed_factor
+        current_distance = distance * nonlinear_progress
         return surface.translate(direction * current_distance, inplace=True)
+    return transform
+
+def set_center(center: Union[np.ndarray, List[float]]):
+    """ Set the center of the surface """
+    def transform(surface: pv.PolyData, frame: int=None, total_frames: int=None) -> pv.PolyData:
+        return surface.translate(-np.array(center), inplace=True)
     return transform
 
 def wait():
@@ -433,8 +435,37 @@ def hide():
     """
     def transform(surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
         # Create opacity array of zeros
-        surface.prop.opacity = 0
-        return surface
+        transform_attr = {"opacity": 0}
+        return surface, transform_attr
+    return transform
+
+def show(opacity: float=1):
+    """Create a transformation that makes an object visible.
+    
+    Returns
+    -------
+    Callable
+        A transformation function that makes the surface visible
+    """
+    def transform(surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
+        return surface, {"opacity": opacity}
+    return transform
+
+def change_color(target_color: Union[str, Tuple[float, float, float]]):
+    """Create a transformation that changes the color of an object.
+    
+    Parameters
+    ----------
+    target_color : Union[str, Tuple[float, float, float]]
+        The target color to transition to. Can be a string name or RGB tuple.
+    
+    Returns
+    -------
+    Callable
+        A transformation function that changes the surface color
+    """
+    def transform(surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
+        return surface, {"color": target_color}
     return transform
 
 @dataclass
@@ -444,107 +475,72 @@ class Transform:
     end_frame: int
 
 class SequentialTransform:
-    def __init__(self, *transforms: Callable, frame_splits: Optional[List[float]] = None):
+    def __init__(self, *transforms: Union[Callable, List[Callable]], frame_fractions: Optional[List[float]] = None):
         """
         Parameters
         ----------
-        transforms : Callable
-            Transform functions to apply sequentially
-        frame_splits : Optional[List[float]]
-            List of fractions indicating when each transform should start.
-            E.g., [0.5, 0.8] means first transform runs 0-0.5, second 0.5-0.8, third 0.8-1.0
-            If None, splits time equally among transforms
+        transforms : Union[Callable, List[Callable]]
+            Transform functions to apply sequentially. Can be single transforms or lists of
+            transforms to be applied simultaneously.
+        frame_fractions : Optional[List[float]]
+            List of fractions indicating how many frames each transform should take.
+            E.g., [0.3, 0.2, 0.5] means:
+            - first transform uses 30% of frames
+            - second transform uses 20% of frames
+            - third transform uses 50% of frames
+            Must sum to 1.0. If None, splits time equally among transforms.
         """
-        self.transforms = transforms
-        if frame_splits is None:
+        # Convert single transforms to lists for consistent handling
+        self.transforms = [t if isinstance(t, (list, tuple)) else [t] for t in transforms]
+        
+        if frame_fractions is None:
             # Split frames equally
-            splits = np.linspace(0, 1, len(transforms) + 1)
-            self.frame_splits = list(zip(splits[:-1], splits[1:]))
+            self.frame_fractions = [1/len(self.transforms)] * len(self.transforms)
         else:
-            # Convert user splits to ranges
-            splits = [0] + frame_splits + [1.0]
-            self.frame_splits = list(zip(splits[:-1], splits[1:]))
+            if len(frame_fractions) != len(self.transforms):
+                raise ValueError("Number of frame fractions must match number of transforms")
+            if abs(sum(frame_fractions) - 1.0) > 1e-6:
+                raise ValueError("Frame fractions must sum to 1.0")
+            self.frame_fractions = frame_fractions
+
+        # Convert fractions to cumulative ranges
+        self.frame_splits = []
+        current = 0
+        for fraction in self.frame_fractions:
+            self.frame_splits.append((current, current + fraction))
+            current += fraction
 
     def __call__(self, surface: pv.PolyData, frame: int, total_frames: int) -> pv.PolyData:
         progress = frame / total_frames
         transformed_surface = surface.copy()
+        combined_attrs = {}
         
         # Apply all transforms up to the current progress
-        for (start, end), transform in zip(self.frame_splits, self.transforms):
+        for (start, end), transform_list in zip(self.frame_splits, self.transforms):
             if progress <= start:
-                # Haven't reached this transform yet
+                # Haven't reached these transforms yet
                 break
             elif progress >= end:
-                # Apply the full transform
-                transformed_surface = transform(transformed_surface, total_frames, total_frames)
+                # Apply the full transforms
+                for transform in transform_list:
+                    result = transform(transformed_surface, total_frames, total_frames)
+                    if isinstance(result, tuple):
+                        transformed_surface, transform_attr = result
+                        combined_attrs.update(transform_attr)
+                    else:
+                        transformed_surface = result
             else:
-                # Partially apply this transform
+                # Partially apply these transforms
                 local_progress = (progress - start) / (end - start)
                 local_frame = int(local_progress * total_frames)
-                transformed_surface = transform(transformed_surface, local_frame, total_frames)
+                for transform in transform_list:
+                    result = transform(transformed_surface, local_frame, total_frames)
+                    if isinstance(result, tuple):
+                        transformed_surface, transform_attr = result
+                        combined_attrs.update(transform_attr)
+                    else:
+                        transformed_surface = result
                 break
         
-        return transformed_surface
+        return (transformed_surface, combined_attrs) if combined_attrs else transformed_surface
 
-
-# Add red XY plane that translates along Z to the surfaces
-plane_center = surfaces[1].center
-surfaces.update({
-    4: pv.Plane(center=(plane_center[0], plane_center[1], 0), direction=(0, 0, 1), i_size=50, j_size=50)
-})
-
-surface_attributes.update({
-    4: SurfaceAttributes(color="red", opacity=1)
-})
-
-# Move other surfaces to left
-for label in [1, 2, 3]:
-    surfaces[label] = surfaces[label].translate((0, -50, 0), inplace=True)
-
-# Transformations
-distance = 50
-degrees = 2*360
-transformations = {
-    1: [
-        SequentialTransform(
-            translate([0, 1, 0], distance),
-            wait(),
-            translate([0, 1, 0], distance),
-            frame_splits=[0.2, 0.5]
-        )
-    ],
-    2: [
-        SequentialTransform(
-            translate([0, 1, 0], distance),
-            wait(),
-            translate([0, 1, 0], distance),
-            frame_splits=[0.2, 0.5]
-        )
-    ],
-    3: [
-        SequentialTransform(
-            translate([0, 1, 0], distance),
-            wait(),
-            translate([0, 1, 0], distance),
-            frame_splits=[0.2, 0.5]
-        )
-    ],
-    4: [
-        SequentialTransform(
-            wait(),
-            translate([0, 0, 1], 50),
-            wait(),
-            frame_splits=[0.2, 0.5]
-        )
-    ]
-}
-
-animate_surfaces(
-    surfaces,
-    transformations,
-    n_frames=64,
-    render_settings=render_settings,
-    surface_attributes=surface_attributes,
-    output_path="cell_animation.gif",
-    camera_position="yz"
-)
