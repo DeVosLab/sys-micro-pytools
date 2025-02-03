@@ -1,0 +1,19 @@
+name: sys-micro-pytools
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - tifffile
+  - nd2reader
+  - scikit-image
+  - colorcet
+  - tqdm
+  - ca-certificates
+  - certifi
+  - openssl
+  - pyvista
+prefix: /Users/timvdl/miniforge3/envs/sys-micro-pytools
