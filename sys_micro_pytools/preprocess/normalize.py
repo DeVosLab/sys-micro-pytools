@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from numbers import Number
 
-from io import read_tif_or_nd2
+from io import read_tiff_or_nd2
 from preprocess.flat_field import flat_field_correction
 
 def normalize_img(img: np.ndarray, pmin: float=0.1, pmax: float=99.9,
@@ -106,7 +106,7 @@ def get_ref_wells_percentiles(df: pd.DataFrame, ref_wells: List[str],
     count = 0
     for _, row in df_ref.iterrows():
         file = str(row[path_col])
-        ref_img = read_tif_or_nd2(file, bundle_axes='yx' if n_channels == 1 else 'cyx').astype(float)
+        ref_img = read_tiff_or_nd2(file, bundle_axes='yx' if n_channels == 1 else 'cyx').astype(float)
         if flat_field is not None:
             ref_img = flat_field_correction(ref_img, flat_field)
         if ref_img.ndim == 2:
