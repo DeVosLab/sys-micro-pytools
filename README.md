@@ -69,7 +69,7 @@ from sys_micro_pytools.io import read_tiff_or_nd2
 from sys_micro_pytools.preprocess import flat_field_correction, create_composite
 
 # Load image
-img = read_tiff_or_nd2('path/to/your/data.tif') # Let's img.shape = (5, 512, 512)
+img = read_tiff_or_nd2('path/to/your/data.tif') # Let's assume img.shape = (5, 512, 512)
 
 # Load flat-field correction image
 flat_field = read_tiff_or_nd2('path/to/your/flat_field.tif') # Also flat_field.shape = (512, 512)
