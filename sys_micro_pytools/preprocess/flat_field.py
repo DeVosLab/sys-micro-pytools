@@ -69,9 +69,6 @@ def compute_flat_field(input_path, from_well=None, skip_wells=None,
     
     # Gaussian Blur
     flat_field = gaussian(flat_field, sigma=sigma, channel_axis=0)
-    
-    # Gaussian Blur
-    flat_field = gaussian(flat_field, sigma=sigma, channel_axis=0)
 
     return flat_field, type
 
