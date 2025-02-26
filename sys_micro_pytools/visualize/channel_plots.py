@@ -5,6 +5,7 @@ import tifffile
 import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
+from typing import Union, List, Tuple, Optional
 
 from io import read_tiff_or_nd2
 from preprocess.flat_field import flat_field_correction
@@ -12,25 +13,58 @@ from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_w
 from preprocess.composite import create_composite
 
 
-def main(**kwargs):
-    # Get input arguments
-    input_path = Path(kwargs['input_path'])
-    suffix = kwargs['suffix']
-    pmin, pmax = kwargs['percentiles']
+def create_channel_plots(
+    input_path: Union[str, Path],
+    output_path: Union[str, Path],
+    img_type: str = 'multichannel',
+    channels2use: Union[List[int], int] = 0,
+    suffix: str = '.nd2',
+    normalize: bool = False,
+    ref_wells: Optional[List[str]] = None,
+    filename_well_idx: Tuple[int, int] = (4, 7),
+    filename_field_idx: Tuple[int, int] = (17, 21),
+    flat_field_path: Optional[Union[str, Path]] = None,
+    percentiles: Tuple[float, float] = (0.1, 99.9),
+    pattern2ignore: Optional[List[str]] = None,
+    patterns2have: Optional[List[str]] = None,
+    field_idx: Optional[int] = None,
+    output_type: List[str] = ['channels', 'composite']
+) -> None:
+    """Create channel plots and composite images from multichannel microscopy data.
 
-    # Output path
-    output_path = Path(kwargs['output_path'])
+    Args:
+        input_path: Path to directory containing images
+        output_path: Path to directory where output will be saved
+        img_type: Type of image to plot ('multichannel' or 'grayscale')
+        channels2use: Channels to use for making the plots
+        suffix: Suffix of image files
+        normalize: Whether to store normalized channel images
+        ref_wells: Well(s) to use as reference for normalization
+        filename_well_idx: Start and stop indices of well name in filename
+        filename_field_idx: Start and stop indices of field number in filename
+        flat_field_path: Path to flat field correction image
+        percentiles: Percentiles for image normalization
+        pattern2ignore: Pattern to ignore in filename
+        patterns2have: Patterns required in filename
+        field_idx: Index of field to plot
+        output_type: Type of output to save ('channels' and/or 'composite')
+    """
+    # Convert paths to Path objects
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    
+    # Create output directories
     output_path.mkdir(parents=True, exist_ok=True)
-    if 'channels' in kwargs['output_type']:
+    if 'channels' in output_type:
         output_path_channels = output_path.joinpath('plots_channels')
         output_path_channels.mkdir(exist_ok=True)
-    if 'composite' in kwargs['output_type']:
+    if 'composite' in output_type:
         output_path_composite = output_path.joinpath('plots_composite')
         output_path_composite.mkdir(exist_ok=True)
 
     # Load flat field
-    if kwargs['flat_field_path'] is not None:
-        flat_field_path = Path(kwargs['flat_field_path'])
+    if flat_field_path is not None:
+        flat_field_path = Path(flat_field_path)
         if flat_field_path.suffix == '.tif':
             flat_field_files = [flat_field_path]
         else:
@@ -44,74 +78,74 @@ def main(**kwargs):
     
     # Loop over files and save plots
     files = sorted([f for f in input_path.iterdir() if f.suffix == suffix and not f.name.startswith('.')])
-    wells = [f.stem[kwargs['filename_well_idx'][0]:kwargs['filename_well_idx'][1]] for f in files]
-    fields = [f.stem[kwargs['filename_field_idx'][0]:kwargs['filename_field_idx'][1]] for f in files]
+    wells = [f.stem[filename_well_idx[0]:filename_well_idx[1]] for f in files]
+    fields = [f.stem[filename_field_idx[0]:filename_field_idx[1]] for f in files]
 
     df = pd.DataFrame({'file': files, 'well': wells, 'field': fields})
 
-    if kwargs['field_idx'] is not None:
-        idx = [i for i, f in enumerate(fields) if int(f) == kwargs['field_idx']]
+    if field_idx is not None:
+        idx = [i for i, f in enumerate(fields) if int(f) == field_idx]
         files = [files[i] for i in idx]
         wells = [wells[i] for i in idx]
         fields = [fields[i] for i in idx]
     
-    if kwargs['ref_wells'] is not None:
+    if ref_wells is not None:
         pmin_vals, pmax_vals = get_ref_wells_percentiles(
-            df, ref_wells=kwargs['ref_wells'], 
-            n_channels=len(kwargs['channels2use']), 
+            df, ref_wells=ref_wells, 
+            n_channels=len(channels2use), 
             flat_field=flat_field, 
-            pmin=pmin, pmax=pmax
+            pmin=percentiles[0], pmax=percentiles[1]
             )
 
     for file, well, field in tqdm(zip(files, wells, fields), total=len(files)):
-        if kwargs['pattern2ignore'] is not None and any([x in str(file.stem) for x in kwargs['pattern2ignore']]):
+        if pattern2ignore is not None and any([x in str(file.stem) for x in pattern2ignore]):
             continue
 
-        if kwargs['patterns2have'] is not None and not any([x in str(file.stem) for x in kwargs['patterns2have']]):
+        if patterns2have is not None and not any([x in str(file.stem) for x in patterns2have]):
             continue
 
-        img = read_tiff_or_nd2(file, bundle_axes='cyx' if not kwargs['grayscale'] else 'yx').astype(float)
+        img = read_tiff_or_nd2(file, bundle_axes='cyx' if img_type == 'grayscale' else 'yx').astype(float)
         
         if flat_field is not None:
             img = flat_field_correction(img, flat_field)
 
-        if kwargs['img_type'] == 'grayscale':
+        if img_type == 'grayscale':
             n_channels = 1
             img_norm = normalize_img(
                 img, 
-                pmin=pmin, pmax=pmax,
-                pmin_val=pmin_vals[0] if kwargs['ref_wells'] is not None else None, 
-                pmax_val=pmax_vals[0] if kwargs['ref_wells'] is not None else None,
+                pmin=percentiles[0], pmax=percentiles[1],
+                pmin_val=pmin_vals[0] if ref_wells is not None else None, 
+                pmax_val=pmax_vals[0] if ref_wells is not None else None,
                 clip=True
                 )
             img_composite = img_norm
         else:
-            if kwargs['channels2use'] is not None:
-                img = img[kwargs['channels2use'],:,:]
+            if channels2use is not None:
+                img = img[channels2use,:,:]
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=0)
             n_channels = img.shape[0]
             img_norm = img.copy()
             img_norm = normalize_per_channel(
                 img,
-                pmin=pmin, pmax=pmax,
-                pmin_vals=pmin_vals if kwargs['ref_wells'] is not None else None, 
-                pmax_vals=pmax_vals if kwargs['ref_wells'] is not None else None,
+                pmin=percentiles[0], pmax=percentiles[1],
+                pmin_vals=pmin_vals if ref_wells is not None else None, 
+                pmax_vals=pmax_vals if ref_wells is not None else None,
                 clip=True
                 )
             img_composite = create_composite(img_norm, channel_dim=0)
         
         # Save channel plots
-        if 'channels' in kwargs['output_type']:
+        if 'channels' in output_type:
             _, axes = plt.subplots(1, n_channels, figsize=(4*n_channels, 5))
             axes = [axes] if n_channels == 1 else axes # Make sure axes is a list
             for C in range(n_channels):
                 # Plot of all channels
                 axes[C].imshow(
-                    img_norm[C,:,:] if kwargs['normalize'] else img[C,:,:],
+                    img_norm[C,:,:] if normalize else img[C,:,:],
                     cmap='gray',
-                    vmin=0 if not kwargs['normalize'] else None,
-                    vmax=1 if not kwargs['normalize'] else None
+                    vmin=0 if not normalize else None,
+                    vmax=1 if not normalize else None
                     )
                 axes[C].set_xticks([])
                 axes[C].set_yticks([])
@@ -123,7 +157,7 @@ def main(**kwargs):
                 filename.parent.mkdir(exist_ok=True)
                 tifffile.imwrite(
                     str(filename),
-                    (img_norm[C,:,:] if kwargs['normalize'] else img[C,:,:]).astype(np.float32),
+                    (img_norm[C,:,:] if normalize else img[C,:,:]).astype(np.float32),
                     imagej=True,
                     compression='zlib'
                     )
@@ -134,7 +168,7 @@ def main(**kwargs):
             plt.close()
 
         # Save composite plots
-        if 'composite' in kwargs['output_type']:
+        if 'composite' in output_type:
             _, axes = plt.subplots(1, 1, figsize=(9, 9))
             filename = Path(output_path_composite).joinpath(f'{file.stem}.tif')
             filename.parent.mkdir(exist_ok=True)
@@ -144,6 +178,26 @@ def main(**kwargs):
                 img_composite,
                 photometric='rgb',
                 )
+
+def main(**kwargs):
+    """Main function that processes command line arguments and calls create_channel_plots."""
+    create_channel_plots(
+        input_path=kwargs['input_path'],
+        output_path=kwargs['output_path'],
+        img_type=kwargs['img_type'],
+        channels2use=kwargs['channels2use'],
+        suffix=kwargs['suffix'],
+        normalize=kwargs['normalize'],
+        ref_wells=kwargs['ref_wells'],
+        filename_well_idx=kwargs['filename_well_idx'],
+        filename_field_idx=kwargs['filename_field_idx'],
+        flat_field_path=kwargs['flat_field_path'],
+        percentiles=kwargs['percentiles'],
+        pattern2ignore=kwargs['pattern2ignore'],
+        patterns2have=kwargs['patterns2have'],
+        field_idx=kwargs['field_idx'],
+        output_type=kwargs['output_type']
+    )
 
 def parse_args():
     parser = ArgumentParser()
