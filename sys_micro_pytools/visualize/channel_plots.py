@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import List
 from tqdm import tqdm
 import tifffile
 import numpy as np
@@ -10,7 +9,6 @@ import pandas as pd
 from io import read_tiff_or_nd2
 from preprocess.flat_field import flat_field_correction
 from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
-
 from preprocess.composite import create_composite
 
 
