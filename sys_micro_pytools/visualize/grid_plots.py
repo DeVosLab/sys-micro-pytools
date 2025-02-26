@@ -18,41 +18,9 @@ from io import read_tiff_or_nd2
 from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
 from preprocess.flat_field import get_flat_field_files, flat_field_correction
 from preprocess.composite import create_composite2D
+from df import link_df2plate_layout
+from visualize import create_palette
 
-
-def create_palette(plate_layout: pd.DataFrame, hue_vars: Union[Tuple, List], cmap: str ='tab20', 
-                   remove_hue_combo: Union[tuple, list, None] = None, 
-                   hue_start_rgba: Union[tuple, list, None] = None) -> dict:
-        # Get all values of hue_vars
-        hue_var_vals = []
-        for hue_var in hue_vars:
-            if hue_var not in plate_layout.columns:
-                raise ValueError(f'{hue_var} is not a column in the plate layout file')
-            hue_var_vals.append(plate_layout[hue_var].drop_duplicates().values)
-
-        # Make all combinations of all posible hue_var_vals pairs
-        hue_order = list(itertools.product(*hue_var_vals))
-
-        # Remove hue combinations
-        if remove_hue_combo is not None:
-            for hue_combo in remove_hue_combo:
-                if hue_combo in hue_order:
-                    hue_order.remove(hue_combo)
-        
-        # Create palette with remaining hue combinations
-        try:
-            cmap = colormaps[cmap]
-        except KeyError:
-            try:
-                cmap = plt.cm.get_cmap(f'cet_{cmap}')
-            except ValueError:
-                raise ValueError(f'{cmap} is not a valid colormap')
-
-        colors = [cmap(i) for i in range(len(hue_order))]
-        if hue_start_rgba is not None:
-            colors = (tuple(hue_start_rgba),) + tuple(colors[:-1])
-        palette = {hue: color for hue, color in zip(hue_order, colors)}
-        return palette, hue_order
 
 def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str,
                   filename_well_idx: Union[list, tuple], filename_field_idx: Union[list, tuple],
@@ -130,44 +98,6 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
     df_images = df_images[~df_images['Well'].isin(skip_wells)].reset_index(drop=True)
 
     return df_images
-
-def link_df2plate_layout(df: pd.DataFrame, plate_layout: pd.DataFrame, on: Union[list, tuple] = ['Plate', 'Well']) -> pd.DataFrame:
-    ''' Link image information to plate layout
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataframe with image information
-    plate_layout : pd.DataFrame
-        Dataframe or series with plate layout information
-    
-    Returns
-    -------
-    df : pd.DataFrame
-        Dataframe with original and plate layout information
-
-    '''
-    assert isinstance(df, pd.DataFrame), 'df_images must be a pandas DataFrame'
-    assert isinstance(plate_layout, pd.DataFrame), 'plate_layout must be a pandas DataFrame'
-
-    # Original columns
-    orig_cols = list(df.columns)
-
-    # Merge plate layout with df_images
-    df = df.merge(plate_layout, how='left', on=on).reset_index(drop=True)
-
-    # Remove column 'index' from plate_layout
-    if 'index' in df.columns:
-        df.drop(columns=['index'], inplace=True)
-
-    # Remove duplicate cols by looping over original columns 
-    # and use the column from plate_layout if it exists
-    for col in orig_cols:
-        if (col not in on) and (col in plate_layout.columns):
-            df[col] = df[f'{col}_y']
-            df.drop(columns=[f'{col}_x', f'{col}_y'], inplace=True)
-    
-    return df
 
 def create_grid_plot(
         df: pd.DataFrame,
