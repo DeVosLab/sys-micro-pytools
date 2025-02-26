@@ -1,8 +1,10 @@
 import numpy as np
 from matplotlib.colors import to_rgb
 
+from preprocess.normalize import normalize_img
+
 def create_composite(img, channel_dim, colors=('cyan', 'green', 'orange', 'red', 'yellow', 'magenta' ), 
-                     normalize=True, pmin=0, pmax=100, clip=True, vmin=0.0, vmax=1.0):
+                     do_normalize=True, pmin=0, pmax=100, do_clip=True, vmin=0.0, vmax=1.0):
     """
     Create a composite image from a multi-channel image.
     
@@ -57,8 +59,8 @@ def create_composite(img, channel_dim, colors=('cyan', 'green', 'orange', 'red',
         colors[i][2]*channel
         ), axis=channel_dim)
         composite_img += channel2rgb
-    if normalize:
-        composite_img = normalize(composite_img, pmin=pmin, pmax=pmax, clip=False)
-    if clip:
+    if do_normalize:
+        composite_img = normalize_img(composite_img, pmin=pmin, pmax=pmax, clip=False)
+    if do_clip:
         composite_img = np.clip(composite_img, vmin, vmax)
     return composite_img
