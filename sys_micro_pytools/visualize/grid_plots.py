@@ -61,9 +61,6 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
         dirs = [input_path]
     df_images = pd.DataFrame()
     for dir in dirs:
-        # Assume DATE_CELLTYPE_PLATEx_Rx format
-        cell_type = dir.stem.split('_')[1]
-
         # Use re.findall to extract numbers after "plate" and "R"
         plate_pattern = r'plate([A-Za-z0-9]+)'
         r_pattern = r'R(\d+)'
@@ -78,7 +75,6 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
 
         df_entry = pd.DataFrame().from_dict({
             'Dir': [dir.stem] * len(files),
-            'CellType': [cell_type] * len(files),
             'Rep': [int(rep_id)] * len(files),
             'Plate': [plate_id] * len(files),
             'Well': wells,
@@ -102,7 +98,7 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
 def create_grid_plot(
         df: pd.DataFrame,
         flat_field: np.ndarray,
-        hue_vars: Union[list, tuple, str],
+        condition_vars: Union[list, tuple, str],
         palette: dict,
         field_idx: Union[list, tuple, int]=None,
         img_type: Literal['multi_channel', 'grayscale', 'mask']='multi_channel',
@@ -145,8 +141,8 @@ def create_grid_plot(
             df_row_col = df[(df['Row'] == row) & (df['Col'] == col)].sort_values(by='Field')
             if df_row_col.shape[0] == 0:
                 continue
-            hue_var_vals = tuple(df_row_col[hue_var].values[0] for hue_var in hue_vars)
-            hue = palette[hue_var_vals]
+            condition_vals = tuple(df_row_col[hue_var].values[0] for hue_var in condition_vars)
+            condition_color = palette[condition_vals]
 
             # Randomly select a field from the well
             if field_idx is not None:
@@ -208,7 +204,7 @@ def create_grid_plot(
             axes[r, c].imshow(img)
             axes[r, c].set_xticks([])
             axes[r, c].set_yticks([])
-            axes[r, c].patch.set_edgecolor(hue)  
+            axes[r, c].patch.set_edgecolor(condition_color)  
             axes[r, c].patch.set_linewidth(10)
     plt.suptitle(title)
     plt.tight_layout()
@@ -222,15 +218,15 @@ def main(**kwargs):
     if isinstance(kwargs['skip_wells'], str):
         kwargs['skip_wells'] = [kwargs['skip_wells']]
 
-    if isinstance(kwargs['hue_vars'], str):
-        kwargs['hue_vars'] = [kwargs['hue_vars']]
+    if isinstance(kwargs['condition_vars'], str):
+        kwargs['condition_vars'] = [kwargs['condition_vars']]
 
     if kwargs['grayscale'] or kwargs['masks']:
         assert kwargs['grayscale'] != kwargs['masks'], \
             'Either --grayscale or --masks must be specified, but not both'
     
-    if kwargs['remove_hue_combo'] is not None:
-        kwargs['remove_hue_combo'] = [tuple(hue_combo.split(',')) for hue_combo in kwargs['remove_hue_combo']]
+    if kwargs['conditions2remove'] is not None:
+        kwargs['conditions2remove'] = [tuple(condition.split(',')) for condition in kwargs['conditions2remove']]
 
     if isinstance(kwargs['field_idx'], int):
         kwargs['field_idx'] = [kwargs['field_idx']]
@@ -241,14 +237,16 @@ def main(**kwargs):
     plate_layout = pd.read_csv(plate_layout, sep=",|;"); 
     plate_layout.columns = [col.capitalize() for col in plate_layout.columns]
     plate_layout['Plate'] = plate_layout['Plate'].astype(str)
+    plate_layout['Well'] = plate_layout['Well'].astype(str)
+    plate_layout['Row'] = plate_layout['Row'].astype(str)
+    plate_layout['Col'] = plate_layout['Col'].astype(int)
 
     # Set color palette
     palette, _ = create_palette(
         plate_layout,
-        kwargs['hue_vars'],
+        condition_vars=kwargs['condition_vars'],
         cmap=kwargs['cmap'],
-        remove_hue_combo=kwargs['remove_hue_combo'],
-        hue_start_rgba=kwargs['hue_start_rgba']
+        conditions2remove=kwargs['conditions2remove'],
     )
 
     # Get flat field images
@@ -269,6 +267,10 @@ def main(**kwargs):
     )
     df_images.columns = [col.capitalize() for col in df_images.columns]
     df_images['Plate'] = df_images['Plate'].astype(str)
+    df_images['Well'] = df_images['Well'].astype(str)
+    df_images['Row'] = df_images['Row'].astype(str)
+    df_images['Col'] = df_images['Col'].astype(int)
+    df_images['Field'] = df_images['Field'].astype(int)
 
     # Merge plate layout with df_images
     df_images = link_df2plate_layout(df_images, plate_layout)
@@ -332,12 +334,10 @@ def parse_args():
         help='Path to image to use as flat field correction')
     parser.add_argument('--cmap', type=str, default='tab10',
         help='Color map to use image borders in grid plot')
-    parser.add_argument('--hue_vars', nargs='*', type=str, default=['Treat', 'Dose'],
+    parser.add_argument('--condition_vars', nargs='*', type=str, default=['Treat', 'Dose'],
         help='Variables to use for color encoding')
-    parser.add_argument('--remove_hue_combo', nargs='*', type=str, default=None,
-        help='List of hue combinations to remove from the hue palette, e.g. --remove_hue_combo "DMSO,L"')
-    parser.add_argument('--hue_start_rgba', nargs=4, type=float, default=None,
-        help='RGBA values for the first hue in the palette')
+    parser.add_argument('--conditions2remove', nargs='*', type=str, default=None,
+        help='List of condition combinations to remove from the palette, e.g. --conditions2remove "DMSO,L"')
     parser.add_argument('--check_batches', action='store_true',
         help='Check if input_path contains subdirectories')
     parser.add_argument('--field_idx', type=int, nargs='+', default=None,
