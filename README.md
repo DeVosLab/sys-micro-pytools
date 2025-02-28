@@ -85,7 +85,7 @@ tifffile.imwrite('path/to/your/processed_image.tif', img)
 ### Convert a plate layout as a list in a .csv file
 Create a plate layout as a list in a .csv file from a plate layout grid provided in a .csv or .xlsx file(s). Visualize the plate layouts for each identified plate id. Different plates can be provided as separate files (.csv or .xlsx), or as separate sheets in a single .xlsx file. The name of the plate id is extracted from the filename or sheet name using the pattern "_plateX" where X is an alphanumeric character or sequence of such characters.
 ```bash
-python sys_micro_pytools/preprocess/plate_grid2layout.py -i path/to/your/plate_layout.xlsx -o path/to/your/plate_layout.csv -v
+python sys_micro_pytools/df/plate_grid2layout.py -i path/to/your/plate_layout.xlsx -o path/to/your/plate_layout.csv -v
 ```
 
 ### Grid plots
