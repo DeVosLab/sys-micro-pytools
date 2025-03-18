@@ -5,11 +5,13 @@ dependencies:
   - python>=3.8
   - numpy
   - pandas
+  - openpyxl
   - matplotlib
   - seaborn
   - tifffile
   - nd2reader
   - scikit-image
+  - scikit-learn
   - colorcet
   - tqdm
   - ca-certificates
