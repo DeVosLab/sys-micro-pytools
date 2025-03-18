@@ -14,9 +14,6 @@ from .composite import (
     create_composite
 )
 
-from .plate_grid2layout import (
-    plategrid2layout
-)
 
 __all__ = [
     'flat_field_correction',
@@ -25,6 +22,5 @@ __all__ = [
     'normalize_img',
     'normalize_per_channel', 
     'get_ref_wells_percentiles',
-    'create_composite',
-    'plategrid2layout'
+    'create_composite'
 ]
