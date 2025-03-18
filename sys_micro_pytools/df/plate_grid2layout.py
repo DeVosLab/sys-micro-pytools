@@ -9,7 +9,7 @@ from matplotlib.colors import ListedColormap
 import seaborn as sns
 
 
-def plategrid2layout(paths: Union[List[Union[str, Path]], Union[str, Path]]) -> pd.DataFrame:
+def plate_grid2layout(paths: Union[List[Union[str, Path]], Union[str, Path]]) -> pd.DataFrame:
     ''' Merge multiple well plate layouts into a single dataframe, considering multiple files or multiple sheets.
         
         Each layout is a N x M matrix in which the first row is the header (column names)
@@ -241,7 +241,7 @@ def parse_args():
 
 def main(args):
     # Merge the plate layouts into a single dataframe
-    df = plategrid2layout(args.input_path)
+    df = plate_grid2layout(args.input_path)
 
     # Save the merged layout dataframe
     if args.output_path:
