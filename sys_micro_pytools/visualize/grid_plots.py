@@ -14,12 +14,12 @@ import colorcet as cc
 from matplotlib import pyplot as plt
 from matplotlib import colormaps
 
-from io import read_tiff_or_nd2
-from preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
-from preprocess.flat_field import get_flat_field_files, flat_field_correction
-from preprocess.composite import create_composite2D
-from df import link_df2plate_layout
-from visualize import create_palette
+from sys_micro_pytools.io import read_tiff_or_nd2
+from sys_micro_pytools.preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
+from sys_micro_pytools.preprocess.flat_field import get_flat_field_files, flat_field_correction
+from sys_micro_pytools.preprocess.composite import create_composite
+from sys_micro_pytools.df import link_df2plate_layout
+from sys_micro_pytools.visualize import create_palette
 
 
 def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str,
@@ -121,7 +121,6 @@ def create_grid_plot(
                 'field_idx must be a single integer or a list/tuple of length n_rows * n_cols'
             field_idx = field_idx
 
-    
     if ref_wells is not None:
         pmin_vals, pmax_vals = get_ref_wells_percentiles(
             df, ref_wells=ref_wells, 
@@ -134,8 +133,9 @@ def create_grid_plot(
         pmin_vals = None
         pmax_vals = None
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2 * n_cols, 2 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2 * n_cols + 3, 2 * n_rows))
     count = 0
+    conditions = []
     for r, row in enumerate(rows):
         for c, col in enumerate(cols):
             df_row_col = df[(df['Row'] == row) & (df['Col'] == col)].sort_values(by='Field')
@@ -143,6 +143,7 @@ def create_grid_plot(
                 continue
             condition_vals = tuple(df_row_col[hue_var].values[0] for hue_var in condition_vars)
             condition_color = palette[condition_vals]
+            conditions.append(condition_vals)
 
             # Randomly select a field from the well
             if field_idx is not None:
@@ -188,10 +189,11 @@ def create_grid_plot(
                     img = np.expand_dims(img, axis=0)
                 img = normalize_per_channel(
                     img, pmin=pmin, pmax=pmax,
-                    pmin_val=pmin_vals, pmax_val=pmax_vals,
+                    pmin_vals=pmin_vals, pmax_vals=pmax_vals,
                     clip=True,
                 )
-                img = create_composite2D(img, channel_dim=0)
+                img = create_composite(img, channel_dim=0)
+                img = np.moveaxis(img, 0, -1)
             elif img_type == 'mask':
                 pass
             else:
@@ -206,8 +208,28 @@ def create_grid_plot(
             axes[r, c].set_yticks([])
             axes[r, c].patch.set_edgecolor(condition_color)  
             axes[r, c].patch.set_linewidth(10)
+
+    # Add a legend on the right side
+    legend_elements = []
+    for condition, color in palette.items():
+        if condition not in conditions:
+            continue
+
+        # Format the condition label
+        if isinstance(condition, tuple):
+            label = ', '.join(str(c) for c in condition)
+        else:
+            label = str(condition)
+        legend_elements.append(plt.Rectangle((0, 0), 1, 1, color=color, label=label))
+    
     plt.suptitle(title)
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 0.90, 1])  # Adjust layout to leave space for legend
+    fig.legend(handles=legend_elements, 
+               loc='center right', 
+               title=' - '.join(condition_vars),
+               fontsize=14,
+               bbox_to_anchor=(.95, 0.5),
+               )
     return fig
 
 def main(**kwargs):
@@ -220,10 +242,6 @@ def main(**kwargs):
 
     if isinstance(kwargs['condition_vars'], str):
         kwargs['condition_vars'] = [kwargs['condition_vars']]
-
-    if kwargs['grayscale'] or kwargs['masks']:
-        assert kwargs['grayscale'] != kwargs['masks'], \
-            'Either --grayscale or --masks must be specified, but not both'
     
     if kwargs['conditions2remove'] is not None:
         kwargs['conditions2remove'] = [tuple(condition.split(',')) for condition in kwargs['conditions2remove']]
@@ -234,7 +252,7 @@ def main(**kwargs):
         assert idx >= 0, 'field_idx must be a positive integer'
 
     # Set color palette for treatments
-    plate_layout = pd.read_csv(plate_layout, sep=",|;"); 
+    plate_layout = pd.read_csv(kwargs['plate_layout'], sep=",|;", engine='python'); 
     plate_layout.columns = [col.capitalize() for col in plate_layout.columns]
     plate_layout['Plate'] = plate_layout['Plate'].astype(str)
     plate_layout['Well'] = plate_layout['Well'].astype(str)
@@ -274,7 +292,6 @@ def main(**kwargs):
 
     # Merge plate layout with df_images
     df_images = link_df2plate_layout(df_images, plate_layout)
-    print(df_images.head())
 
     # Plot a single image per row/col combination
     for dir in tqdm(sorted(df_images['Dir'].unique())):
@@ -290,6 +307,7 @@ def main(**kwargs):
         fig = create_grid_plot(
             df_dir,
             flat_field,
+            kwargs['condition_vars'],
             palette,
             field_idx=kwargs['field_idx'],
             img_type=kwargs['img_type'],
@@ -332,7 +350,7 @@ def parse_args():
         help='Indicate that image is a mask. FF correction will not be applied')
     parser.add_argument('--flat_field_path', type=str, default=None,
         help='Path to image to use as flat field correction')
-    parser.add_argument('--cmap', type=str, default='tab10',
+    parser.add_argument('--cmap', type=str, default='cet_glasbey',
         help='Color map to use image borders in grid plot')
     parser.add_argument('--condition_vars', nargs='*', type=str, default=['Treat', 'Dose'],
         help='Variables to use for color encoding')
