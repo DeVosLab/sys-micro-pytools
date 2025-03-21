@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 
 def create_palette(plate_layout: pd.DataFrame, condition_vars: Union[Tuple, List], 
-                   cmap: str ='tab20', conditions2remove: Union[tuple, list, None] = None) -> dict:
+                   cmap: str ='tab20', conditions2remove: Union[tuple, list, None] = None) -> Tuple[dict, list]:
     # Get all values of condition_vars
     condition_vals = []
     for condition_var in condition_vars:
@@ -31,6 +31,23 @@ def create_palette(plate_layout: pd.DataFrame, condition_vars: Union[Tuple, List
             cmap = plt.cm.get_cmap(f'cet_{cmap}')
         except ValueError:
             raise ValueError(f'{cmap} is not a valid colormap')
-    colors = [cmap(i) for i in range(len(condition_order))]
+            
+    # Normalize indices to cycle through the colormap if needed
+    num_conditions = len(condition_order)
+    if hasattr(cmap, 'N'):  # Check if colormap has a defined number of colors
+        cmap_size = cmap.N
+        colors = [cmap(i % cmap_size) for i in range(num_conditions)]
+    else:
+        # For continuous colormaps, normalize between 0 and 1
+        colors = [cmap(i / max(1, num_conditions - 1)) for i in range(num_conditions)]
+        
     palette = {condition: color for condition, color in zip(condition_order, colors)}
     return palette, condition_order
+
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()
+
