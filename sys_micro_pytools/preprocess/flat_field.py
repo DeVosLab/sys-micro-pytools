@@ -6,7 +6,7 @@ import tifffile
 import numpy as np
 from skimage.filters import gaussian
 
-from io import read_tiff_or_nd2
+from sys_micro_pytools.io import read_tiff_or_nd2
 
 def efficient_mean(current_mean, new_value, n):
     return current_mean + (new_value - current_mean) / n
@@ -130,7 +130,7 @@ def parse_args():
         help='Suffix of the input images')
     parser.add_argument('--sigma', type=float, default=90,
         help='Sigma of the Gaussian blur filter')
-    parser.add_argument('--n_images', type=int, default=720,
+    parser.add_argument('--n_images', type=int, default=None,
         help='Number of images to use to generate the flat field')
     parser.add_argument('--from_well', type=str, default=None,
         help=('Well to use to generate the flat field.' 

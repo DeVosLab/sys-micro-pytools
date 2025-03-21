@@ -1,7 +1,7 @@
 import numpy as np
 from matplotlib.colors import to_rgb
 
-from preprocess.normalize import normalize_img
+from sys_micro_pytools.preprocess.normalize import normalize_img
 
 def create_composite(img, channel_dim, colors=('cyan', 'green', 'orange', 'red', 'yellow', 'magenta' ), 
                      do_normalize=True, pmin=0, pmax=100, do_clip=True, vmin=0.0, vmax=1.0):

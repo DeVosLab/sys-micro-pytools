@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from numbers import Number
 
-from io import read_tiff_or_nd2
-from preprocess.flat_field import flat_field_correction
+from sys_micro_pytools.io import read_tiff_or_nd2
+from sys_micro_pytools.preprocess.flat_field import flat_field_correction
 
 def normalize_img(img: np.ndarray, pmin: float=0.1, pmax: float=99.9,
                   pmin_val: float=None, pmax_val: float=None,
