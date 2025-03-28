@@ -39,11 +39,13 @@ def normalize_img(img: np.ndarray, pmin: float=0.1, pmax: float=99.9,
     return img
 
 def normalize_per_channel(img: np.ndarray,
-                          pmin: float=0.1, 
-                          pmax: float=99.9,
-                          pmin_vals: Union[float, List, Tuple]=None,
-                          pmax_vals: Union[float, List, Tuple]=None,
-                          eps: float=1e-9, clip: bool=True) -> np.ndarray:
+                          pmin: Number=0.1, 
+                          pmax: Number=99.9,
+                          pmin_vals: Union[Number, List, Tuple]=None,
+                          pmax_vals: Union[Number, List, Tuple]=None,
+                          eps: float=1e-9,
+                          clip: bool=True,
+                          channel_dim: int=0) -> np.ndarray:
     '''Normalize an image per channel
     
     Args:
@@ -54,16 +56,15 @@ def normalize_per_channel(img: np.ndarray,
         pmax_vals (float, List, Tuple): The maximum value to use for normalization. If None, use the pmax percentile.
         eps (float): A small value to add to the denominator to avoid division by zero.
         clip (bool): Whether to clip the normalized image to the range [0, 1].
-    
+        channel_dim (int): The dimension of the channel.
+
     Returns:
         np.ndarray: The normalized image.
     '''
     if not isinstance(img, np.ndarray):
         raise TypeError('img must be a numpy array')
-    if len(img.shape) != 3:
-        raise ValueError('img must be a 3D array with shape (C, H, W)')
     
-    n_channels = img.shape[0]
+    n_channels = img.shape[channel_dim]
     if pmin_vals is not None:
         if isinstance(pmin_vals, Number):
             pmin_vals = [pmin_vals]*n_channels
@@ -81,14 +82,63 @@ def normalize_per_channel(img: np.ndarray,
         pmax_vals = [None]*n_channels
 
     for C, pmin_val, pmax_val in zip(range(n_channels), pmin_vals, pmax_vals):
-        img[C,:,:] = normalize_img(
-            img[C,:,:], 
+        idx = tuple(slice(None) if i != channel_dim else C for i in range(img.ndim))
+        img[idx] = normalize_img(
+            img[idx], 
             pmin=pmin, pmax=pmax,
             pmin_val=pmin_val, pmax_val=pmax_val,
             eps=eps,
             clip=clip
         )
     return img
+
+
+def standardize_img(img: np.ndarray,
+                    mean_val: Number=None,
+                    std_val: Number=None,
+                    eps: float=1e-9) -> np.ndarray:
+    '''Standardize an image
+    '''
+    if mean_val is None:
+        mean_val = img.mean()
+    if std_val is None:
+        std_val = img.std()
+    return (img - mean_val) / (std_val + eps)
+
+
+def standardize_per_channel(img: np.ndarray,
+                            mean_vals: Union[Number, List, Tuple]=None,
+                            std_vals: Union[Number, List, Tuple]=None,
+                            eps: float=1e-9,
+                            channel_dim: int=0) -> np.ndarray:
+    '''Standardize an image per channel
+    '''
+    if not isinstance(img, np.ndarray):
+        raise TypeError('img must be a numpy array')
+    
+    n_channels = img.shape[channel_dim]
+    if mean_vals is not None:
+        if isinstance(mean_vals, Number):
+            mean_vals = [mean_vals]*n_channels
+        elif len(mean_vals) != n_channels:
+            raise ValueError(f'mean_val must be a float or a list/tuple of length {n_channels}')
+    else:
+        mean_vals = [None]*n_channels
+    
+    if std_vals is not None:
+        if isinstance(std_vals, Number):
+            std_vals = [std_vals]*n_channels
+        elif len(std_vals) != n_channels:
+            raise ValueError(f'std_val must be a float or a list/tuple of length {n_channels}')
+    else:
+        std_vals = [None]*n_channels
+
+    for C, mean_val, std_val in zip(range(n_channels), mean_vals, std_vals):
+        idx = tuple(slice(None) if i != channel_dim else C for i in range(img.ndim))
+        img[idx] = standardize_img(img[idx], mean_val=mean_val, std_val=std_val, eps=eps)
+    return img
+
+
 
 def get_ref_wells_percentiles(df: pd.DataFrame, ref_wells: List[str], 
                                  n_channels: int, flat_field: np.ndarray, 
