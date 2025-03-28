@@ -7,6 +7,8 @@ from .flat_field import (
 from .normalize import (
     normalize_img,
     normalize_per_channel,
+    standardize_img,
+    standardize_per_channel,
     get_ref_wells_percentiles
 )
 
@@ -20,7 +22,9 @@ __all__ = [
     'compute_flat_field',
     'get_flat_field_files',
     'normalize_img',
-    'normalize_per_channel', 
+    'normalize_per_channel',
+    'standardize_img',
+    'standardize_per_channel',
     'get_ref_wells_percentiles',
     'create_composite'
 ]
