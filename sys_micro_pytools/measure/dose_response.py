@@ -198,63 +198,6 @@ def calculate_ic_value(df, x_col, y_col, ic_percentile=50, threshold_pct=10, con
             'model': best_fit['model']
         }
 
-
-def parse_args():
-    parser = ArgumentParser()
-    parser.add_argument('--filename_dose', type=Path, nargs='+', required=True,
-                        help='Path(s) to dose response data')
-    parser.add_argument('--grid2list', action='store_true', default=False,
-                        help='Convert dose response data from grid to list format')
-    parser.add_argument('--var2add', type=str, default=None,
-                        help='Variable to add to the dose response data')
-    parser.add_argument('--var2add_value', type=str, nargs='*', default=None,
-                        help=('Value of the variable to add to the dose response data.'
-                              'This will be added as a new column to the dose response data with value for each row.'))
-    parser.add_argument('--filename_cal', type=Path, default=None,
-                        help='Path to calibration data')
-    parser.add_argument('--ic_percentile', type=float, default=50,
-                        help='Percentile of inhibition to calculate (e.g., 50 for IC50, 30 for IC30)')
-    parser.add_argument('--threshold_pct', type=float, default=10,
-                        help='Minimum percent change required to consider a valid dose-response')
-    parser.add_argument('--groupby_vars', type=str, nargs='+', default=None,
-                        help='Variables to group by, e.g. plate, rep')
-    parser.add_argument('--condition_vars', type=str, nargs='+', default=None,
-                        help='Variables of which unique combinations form a condition')
-    parser.add_argument('--control_values', type=float, nargs='+', default=None,
-                        help='Values of condition variables of the control condition')
-    parser.add_argument('--control_same_var', type=str, default=None,
-                        help=('Variable of which the value is be the same for a subgroup of controls and a condition.'
-                              'This can be used to specify which controls are used for normalization, e.g. different DMSO dilutions '
-                              'for different compounds.'))
-    parser.add_argument('--dose_var', type=str, default='Dose',
-                        help='Dose variable name')
-    parser.add_argument('--response_var', type=str, default='Response',
-                        help='Response variable name')
-    parser.add_argument('--normalize_response_var', action='store_true', default=False,
-                        help='Normalize response variable')
-    parser.add_argument('--inferred_var', type=str, default=None,
-                        help='Variable to infer from response variable using the calibration curve')
-    parser.add_argument('--log_scale_x', action='store_true', default=False,
-                        help='Log scale for x-axis')
-    parser.add_argument('--log_scale_y', action='store_true', default=False,
-                        help='Log scale for y-axis')
-    parser.add_argument('--ic_method', type=str, choices=['relative', 'inner_range'], default='relative',
-                        help=('Whether to calculate the IC value relative to control, '
-                              'or within the range of the response variable for each treatment'))
-    parser.add_argument('--row_var', type=str, default='row',
-                        help='Row variable name for plotting layouts')
-    parser.add_argument('--col_var', type=str, default='col',
-                        help='Column variable name for plotting layouts')
-    
-    if isinstance(args.filename_dose, str):
-        args.filename_dose = [Path(args.filename_dose)]
-    if isinstance(args.condition_vars, str):
-        args.condition_vars = [args.condition_vars]
-    if isinstance(args.control_values, str):
-        args.control_values = [args.control_values]
-    return args
-
-
 def main(args):
     if args.inferred_var is not None and args.filename_cal is not None:
         # Set flag
@@ -384,47 +327,6 @@ def main(args):
         ax.set_title(group_name)
     plt.suptitle(f'{y} heatmap')
     plt.tight_layout()
-
-    # Plot dose response curves
-    dilutions = df_control['DMSO_dilution'].unique()
-    
-    control_response_mean = {}
-    control_response_std = {}
-    control_response_ci = {}
-    control_response_mean_ci = {}
-    for dilution in dilutions:
-        df_c = df_control[df_control['DMSO_dilution'] == dilution]
-        control_response_mean[dilution] = df_c[y].mean()
-        control_response_std[dilution] = df_c[y].std()
-        control_response_ci[dilution] = 1.96 * control_response_std[dilution] / np.sqrt(n_controls)
-        control_response_mean_ci[dilution] = (control_response_mean[dilution] - control_response_ci[dilution], control_response_mean[dilution] + control_response_ci[dilution])
-        print(f"DMSO response mean ({dilution}): {control_response_mean[dilution]:.2f} (CI: {control_response_mean_ci[dilution][0]:.2f} - {control_response_mean_ci[dilution][1]:.2f})")
-    
-    ## Density
-    control_density_mean = {}
-    control_density_std = {}
-    control_density_ci = {}
-    control_density_mean_ci = {}
-    for dilution in dilutions:
-        df_c = df_control[df_control['DMSO_dilution'] == dilution]
-        control_density_mean[dilution] = df_c['Density_pred'].mean()
-        control_density_std[dilution] = df_c['Density_pred'].std()
-        control_density_ci[dilution] = 1.96 * control_density_std[dilution] / np.sqrt(n_controls)
-        control_density_mean_ci[dilution] = (control_density_mean[dilution] - control_density_ci[dilution], control_density_mean[dilution] + control_density_ci[dilution])
-        print(f"DMSO density mean ({dilution}): {control_density_mean[dilution]:.2f} (CI: {control_density_mean_ci[dilution][0]:.2f} - {control_density_mean_ci[dilution][1]:.2f})")
-
-    ## Counts
-    control_counts_mean = {}
-    control_counts_std = {}
-    control_counts_ci = {}
-    control_counts_mean_ci = {}
-    for dilution in dilutions:
-        df_c = df_control[df_control['DMSO_dilution'] == dilution]
-        control_counts_mean[dilution] = df_c[y].mean()
-        control_counts_std[dilution] = df_c[y].std()
-        control_counts_ci[dilution] = 1.96 * control_counts_std[dilution] / np.sqrt(n_controls)
-        control_counts_mean_ci[dilution] = (control_counts_mean[dilution] - control_counts_ci[dilution], control_counts_mean[dilution] + control_counts_ci[dilution])
-        print(f"DMSO counts mean ({dilution}): {control_counts_mean[dilution]:.2f} (CI: {control_counts_mean_ci[dilution][0]:.2f} - {control_counts_mean_ci[dilution][1]:.2f})")
 
     # Get the compounds
     dose_query = ' or '.join(
@@ -568,6 +470,61 @@ def main(args):
         else:
             status = params.get('status', 'unknown_error')
             print(f"{compound}: Could not calculate IC{ic_value} ({status})")
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('--filename_dose', type=Path, nargs='+', required=True,
+                        help='Path(s) to dose response data')
+    parser.add_argument('--grid2list', action='store_true', default=False,
+                        help='Convert dose response data from grid to list format')
+    parser.add_argument('--var2add', type=str, default=None,
+                        help='Variable to add to the dose response data')
+    parser.add_argument('--var2add_value', type=str, nargs='*', default=None,
+                        help=('Value of the variable to add to the dose response data.'
+                              'This will be added as a new column to the dose response data with value for each row.'))
+    parser.add_argument('--filename_cal', type=Path, default=None,
+                        help='Path to calibration data')
+    parser.add_argument('--ic_percentile', type=float, default=50,
+                        help='Percentile of inhibition to calculate (e.g., 50 for IC50, 30 for IC30)')
+    parser.add_argument('--threshold_pct', type=float, default=10,
+                        help='Minimum percent change required to consider a valid dose-response')
+    parser.add_argument('--groupby_vars', type=str, nargs='+', default=None,
+                        help='Variables to group by, e.g. plate, rep')
+    parser.add_argument('--condition_vars', type=str, nargs='+', default=None,
+                        help='Variables of which unique combinations form a condition')
+    parser.add_argument('--control_values', type=float, nargs='+', default=None,
+                        help='Values of condition variables of the control condition')
+    parser.add_argument('--control_same_var', type=str, default=None,
+                        help=('Variable of which the value is be the same for a subgroup of controls and a condition.'
+                              'This can be used to specify which controls are used for normalization, e.g. different DMSO dilutions '
+                              'for different compounds.'))
+    parser.add_argument('--dose_var', type=str, default='Dose',
+                        help='Dose variable name')
+    parser.add_argument('--response_var', type=str, default='Response',
+                        help='Response variable name')
+    parser.add_argument('--normalize_response_var', action='store_true', default=False,
+                        help='Normalize response variable')
+    parser.add_argument('--inferred_var', type=str, default=None,
+                        help='Variable to infer from response variable using the calibration curve')
+    parser.add_argument('--log_scale_x', action='store_true', default=False,
+                        help='Log scale for x-axis')
+    parser.add_argument('--log_scale_y', action='store_true', default=False,
+                        help='Log scale for y-axis')
+    parser.add_argument('--ic_method', type=str, choices=['relative', 'inner_range'], default='relative',
+                        help=('Whether to calculate the IC value relative to control, '
+                              'or within the range of the response variable for each treatment'))
+    parser.add_argument('--row_var', type=str, default='row',
+                        help='Row variable name for plotting layouts')
+    parser.add_argument('--col_var', type=str, default='col',
+                        help='Column variable name for plotting layouts')
+    
+    if isinstance(args.filename_dose, str):
+        args.filename_dose = [Path(args.filename_dose)]
+    if isinstance(args.condition_vars, str):
+        args.condition_vars = [args.condition_vars]
+    if isinstance(args.control_values, str):
+        args.control_values = [args.control_values]
+    return args
 
 if __name__ == '__main__':
     args = parse_args()
