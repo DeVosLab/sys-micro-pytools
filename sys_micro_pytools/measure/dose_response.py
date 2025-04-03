@@ -49,14 +49,12 @@ def calculate_ic_value(df, x_col, y_col, ic_percentile=50, threshold_pct=10, con
         from scipy.optimize import curve_fit
         import warnings
         
-        def logistic_4pl(x, params):
+        def logistic_4pl(x, bottom, top, ic50, hill ):
             """4-parameter logistic function"""
-            bottom, top, ic50, hill = params
             return bottom + (top - bottom) / (1 + (x / ic50) ** hill)
         
-        def quadratic(x, params):
+        def quadratic(x, a, b, c ):
             """Quadratic function"""
-            a, b, c = params
             return a * x**2 + b * x + c
         
         # Sort by x column
@@ -112,7 +110,8 @@ def calculate_ic_value(df, x_col, y_col, ic_percentile=50, threshold_pct=10, con
                     'r_squared': r_squared_logistic,
                     'model': logistic_4pl
                 }
-        except Exception:
+        except Exception as e:
+            print(f'Error fitting logistic model: {e}')
             fits['logistic'] = None
             
         # 2. Try quadratic fit
@@ -133,7 +132,8 @@ def calculate_ic_value(df, x_col, y_col, ic_percentile=50, threshold_pct=10, con
                     'r_squared': r_squared_quad,
                     'model': quadratic
                 }
-        except Exception:
+        except Exception as e:
+            print(f'Error fitting quadratic model: {e}')
             fits['quadratic'] = None
             
         # Select best fit
@@ -308,8 +308,8 @@ def main(args):
     # Plot heatmap of (normalized) responses
     y = response_var_norm if args.normalize_response_var else args.response_var
     n_groups = df_dose.groupby(args.groupby_vars).ngroups
-    n_rows = np.ceil(np.sqrt(n_groups))
-    n_cols = np.ceil(n_groups / n_rows)
+    n_rows = np.ceil(np.sqrt(n_groups)).astype(int)
+    n_cols = np.ceil(n_groups / n_rows).astype(int)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 8))
     axes = axes.flatten()
     vmin = df_dose[y].min()
@@ -334,7 +334,7 @@ def main(args):
         for var, value in zip(args.condition_vars, args.control_values)
     )
     df_dose = df_dose.query(dose_query)
-    condition_vars_no_dose = [var for var in args.condition_vars if var != x]
+    condition_vars_no_dose = [var for var in args.condition_vars if var != args.dose_var]
     conditions = df_dose[condition_vars_no_dose].drop_duplicates()
     n_conditions = len(conditions)
 
@@ -345,8 +345,8 @@ def main(args):
     n_cols = np.ceil(n_conditions / n_rows).astype(int)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(9, 9))
     axes = axes.flatten()
-    x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1
-    y_margin = (df_dose[y].max() - df_dose[y].min()) * 0.1
+    x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1 if not args.log_scale_x else 0
+    y_margin = (df_dose[y].max() - df_dose[y].min()) * 0.1 if not args.log_scale_y else 0
     for ax, (group_name, df_group) in zip(axes, df_dose.groupby(condition_vars_no_dose)):
         sns.boxplot(
             data=df_group, x=x, y=y, ax=ax, label=None, native_scale=True,
@@ -361,13 +361,13 @@ def main(args):
     plt.tight_layout()
 
     # Plot the predicted density
-    if args.do_calibration:
+    if do_calibration:
         x = args.dose_var
         y = args.inferred_var
         y_range = df_dose[y].max() - df_dose[y].min()
-        y_margin = y_range * 0.1
+        y_margin = y_range * 0.1 if not args.log_scale_y else 0
         y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
-        x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1
+        x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1 if not args.log_scale_x else 0
         n_rows = np.ceil(np.sqrt(n_conditions)).astype(int)
         n_cols = np.ceil(n_conditions / n_rows).astype(int)
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(9, 9))
@@ -394,8 +394,9 @@ def main(args):
     # Calculate and plot IC50 for each compound
     x = args.dose_var
     y = args.response_var_norm if args.normalize_response_var else args.response_var
-    ic_percentile = 30
-    threshold_pct = 10
+    y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
+    ic_percentile = args.ic_percentile
+    threshold_pct = args.threshold_pct
     control_value = df_control[y].mean()
     ic_value_results = {}
     
@@ -410,7 +411,7 @@ def main(args):
         
         # Calculate IC50 using control value as reference
         ic_value, params = calculate_ic_value(
-            df_grouped,
+            df_group,
             x_col=x,
             y_col=y, 
             control_value=control_value,
@@ -430,7 +431,7 @@ def main(args):
             y_fit = params['model'](x_fit, *params['params'])
             
             # Plot the fitted curve
-            fit_label = f'IC{ic_percentile} = {ic_value:.2f} nM (R² = {params["r_squared"]:.2f})'
+            fit_label = f'IC{ic_percentile} = {ic_value:.2f} {args.x_unit} (R² = {params["r_squared"]:.2f})'
             ax.plot(x_fit, y_fit, 'r-', label=fit_label)
             
             # Mark the IC value point
@@ -445,12 +446,12 @@ def main(args):
                 transform=ax.transAxes, ha='center', fontsize=10,
                 bbox=dict(facecolor='white', alpha=0.8))
         ax.set_xlim(df_grouped[x].min(), df_grouped[x].max())
-        ax.set_ylim(df_grouped[y].min(), df_grouped[y].max())
-        ax.set_yticks(np.arange(df_grouped[y].min(), df_grouped[y].max(), y_step[y]))
+        ax.set_ylim(df_grouped['mean'].min(), df_grouped['mean'].max())
+        ax.set_yticks(np.arange(y_start, y_stop, y_step))
         ax.set_xscale('log' if args.log_scale_x else 'linear')
         ax.set_yscale('log' if args.log_scale_y else 'linear')
-        ax.set_xlabel(x)
-        ax.set_ylabel(y)
+        ax.set_xlabel(f'{x} ({args.x_unit})')
+        ax.set_ylabel(f'{y} ({args.y_unit if args.y_unit is not None else ""})')
         ax.set_title(group_name)
         ax.grid(True)
         ax.legend(loc='best', fontsize=8)
@@ -466,10 +467,10 @@ def main(args):
         if ic_value is not None:
             status = params.get('status', 'unknown')
             r_squared = params.get('r_squared', 0)
-            print(f"{compound}: {ic_value:.2f} nM (R² = {r_squared:.2f}, status: {status})")
+            print(f"{compound}: {ic_value:.2f} {args.x_unit} (R² = {r_squared:.2f}, status: {status})")
         else:
             status = params.get('status', 'unknown_error')
-            print(f"{compound}: Could not calculate IC{ic_value} ({status})")
+            print(f"{compound}: Could not calculate IC{ic_percentile} ({status})")
 
 def parse_args():
     parser = ArgumentParser()
@@ -492,7 +493,7 @@ def parse_args():
                         help='Variables to group by, e.g. plate, rep')
     parser.add_argument('--condition_vars', type=str, nargs='+', default=None,
                         help='Variables of which unique combinations form a condition')
-    parser.add_argument('--control_values', type=float, nargs='+', default=None,
+    parser.add_argument('--control_values', type=str, nargs='+', default=None,
                         help='Values of condition variables of the control condition')
     parser.add_argument('--control_same_var', type=str, default=None,
                         help=('Variable of which the value is be the same for a subgroup of controls and a condition.'
@@ -513,10 +514,16 @@ def parse_args():
     parser.add_argument('--ic_method', type=str, choices=['relative', 'inner_range'], default='relative',
                         help=('Whether to calculate the IC value relative to control, '
                               'or within the range of the response variable for each treatment'))
+    parser.add_argument('--x_unit', type=str, default='µM',
+                        help='Unit of the x-axis')
+    parser.add_argument('--y_unit', type=str, default=None,
+                        help='Unit of the y-axis')
     parser.add_argument('--row_var', type=str, default='row',
                         help='Row variable name for plotting layouts')
     parser.add_argument('--col_var', type=str, default='col',
                         help='Column variable name for plotting layouts')
+    
+    args = parser.parse_args()
     
     if isinstance(args.filename_dose, str):
         args.filename_dose = [Path(args.filename_dose)]
