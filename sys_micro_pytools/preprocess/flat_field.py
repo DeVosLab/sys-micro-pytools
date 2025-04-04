@@ -1,8 +1,6 @@
-from argparse import ArgumentParser
 from pathlib import Path
 from typing import Union
 from tqdm import tqdm
-import tifffile
 import numpy as np
 from skimage.filters import gaussian
 
