@@ -199,51 +199,7 @@ def calculate_ic_value(df, x_col, y_col, ic_percentile=50, threshold_pct=10, con
         }
 
 def main(args):
-    if args.inferred_var is not None and args.filename_cal is not None:
-        # Set flag
-        do_calibration = True
-
-        # Read the calibration data
-        filename_cal = Path(args.filename_cal)
-        df_cal = pd.read_csv(filename_cal, header=0, index_col=False)
-        #df_cal[args.dose_var] = df_cal[args.dose_var].astype(float)
-        df_cal[args.response_var] = df_cal[args.response_var].astype(float)
-        
-        # Calculate the calibration curve
-        model = calibration_curve(df_cal, args.response_var, args.inferred_var)
-        print(model.coef_)
-        slope = model.coef_[0][0]
-        intercept = model.intercept_[0]
-        r_squared = model.score( df_cal[[args.response_var]], df_cal[[args.inferred_var]])
-        eq = f"y = {slope:.5f}x + {intercept:.5f} (R² = {r_squared:.2f})"
-        
-        # Calculate the standard error
-        y_pred_train = model.predict(df_cal[[args.response_var]])
-        residuals = df_cal[args.inferred_var].values - y_pred_train.flatten()
-        residual_std = np.sqrt(np.sum(residuals ** 2) / (len(df_cal) - 2))
-        x_mean = np.mean(df_cal[args.response_var])
-        x_std = np.sum((df_cal[args.response_var] - x_mean)**2)
-        x_range = np.linspace(df_cal[args.response_var].min(), df_cal[args.response_var].max(), 100)
-        y_pred = model.predict(x_range.reshape(-1, 1)).flatten()
-        std_error = residual_std * np.sqrt(1 + 1/len(df_cal) + (x_range - x_mean)**2 / x_std)
-
-        # Plot the calibration curve
-        df_cal[args.inferred_var] = model.predict(df_cal[[args.response_var]])
-        plt.figure(figsize=(10, 8))
-        sns.scatterplot(data=df_cal, x=args.response_var, y=args.inferred_var, color='black', label='Observed data')
-        sns.lineplot(x=df_cal[args.response_var], y=df_cal[args.inferred_var], color='red', label=eq)
-        plt.fill_between(x_range, y_pred - 1.96*std_error, y_pred + 1.96*std_error, 
-                        color='#d62728', alpha=0.2, label='95% Confidence interval')
-        plt.xlabel(args.response_var)
-        plt.ylabel(args.inferred_var)
-        plt.title(f"Calibration Curve (R-squared: {r_squared:.2f})")
-        plt.legend()
-        plt.grid(axis='both')
-        plt.tight_layout()
-    else:
-        do_calibration = False
-
-    # Calculate the dose response curve
+    # Get dose-response data
     filenames_dose = [Path(file) for file in args.filename_dose]
     dfs_dose = []
     for i, filename_dose in enumerate(filenames_dose):
@@ -276,17 +232,14 @@ def main(args):
         )
     df_dose[args.dose_var] = df_dose[args.dose_var].astype(float)
     df_dose[args.response_var] = df_dose[args.response_var].astype(float)
-    if do_calibration:
-        df_dose[args.inferred_var] = model.predict(df_dose[[args.response_var]])
 
-    # Get DMSO controls
+    # Get the controls
     control_query = ' and '.join(
             f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
             for var, value in zip(args.condition_vars, args.control_values)
         )
     df_control = df_dose.query(control_query)
-    n_controls = len(df_control)
-
+    
     # Normalize response for each group to the control response
     if args.normalize_response_var:
         response_var_norm = f'{args.response_var}_norm'
@@ -296,15 +249,102 @@ def main(args):
         else:
             normalizeby_vars = args.groupby_vars
         for group_name, group_idx in df_dose.groupby(normalizeby_vars).groups.items():
-            df_control_group = df_control.query(group_name)
+            if not isinstance(group_name, tuple):
+                group_name = (group_name,)
+            query = ' and '.join(
+                f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
+                for var, value in zip(normalizeby_vars, group_name)
+            )
+            df_control_group = df_control.query(query)
             df_dose.loc[group_idx, response_var_norm] = df_dose.loc[group_idx, args.response_var] / df_control_group[args.response_var].mean()
     
     # Get DMSO controls after normalization
     df_control = df_dose.query(control_query)
-    n_controls = len(df_control)
+
+    # Get calibration data
+    if args.inferred_var is not None and args.filename_cal is not None:
+        # Set flag
+        do_calibration = True
+        x = response_var_norm if args.normalize_response_var else args.response_var
+        y = args.inferred_var
+
+        # Read the calibration data
+        filename_cal = Path(args.filename_cal)
+        df_cal = pd.read_csv(filename_cal, header=0, index_col=False)
+        df_cal[args.response_var] = df_cal[args.response_var].astype(float)
+
+        # Normalize the calibration data: mean of all controls
+        if args.normalize_response_var:
+            df_cal[response_var_norm] = df_cal[args.response_var] / df_control[args.response_var].mean()
+        
+        # Calculate the calibration curve
+        model = calibration_curve(df_cal, x, y)
+        slope = model.coef_[0][0]
+        intercept = model.intercept_[0]
+        r_squared = model.score( df_cal[[x]], df_cal[[y]])
+        eq = f"y = {slope:.5f}x + {intercept:.5f} (R² = {r_squared:.2f})"
+        
+        # Calculate the standard error
+        y_pred_train = model.predict(df_cal[[x]])
+        residuals = df_cal[y].values - y_pred_train.flatten()
+        
+        # Mean Squared Error (MSE)
+        mse = np.sum(residuals ** 2) / (len(df_cal) - 2)
+        
+        # Calculate x statistics
+        x_mean = np.mean(df_cal[x])
+        x_sum_sq_dev = np.sum((df_cal[x] - x_mean)**2)
+        
+        # Create prediction points for the plot
+        x_range = np.linspace(df_cal[x].min(), df_cal[x].max(), 100)
+        x_range_reshape = x_range.reshape(-1, 1)
+        y_pred = model.predict(x_range_reshape).flatten()
+        
+        # t-value for 95% confidence
+        t_value = 1.96
+        
+        # Calculate confidence interval (for mean response)
+        confidence_intervals = t_value * np.sqrt(mse * (1/len(df_cal) + 
+                                        ((x_range - x_mean)**2 / x_sum_sq_dev)))
+        
+        # Calculate prediction interval (for individual observations)
+        # Note the addition of 1 inside the square root
+        prediction_intervals = t_value * np.sqrt(mse * (1 + 1/len(df_cal) + 
+                                        ((x_range - x_mean)**2 / x_sum_sq_dev)))
+
+        # Plot the calibration curve
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(data=df_cal, x=x, y=y, color='black', label='Observed data')
+        sns.lineplot(x=x_range, y=y_pred, color='red', label=eq)
+        
+        # Plot confidence interval (for mean)
+        plt.fill_between(x_range, 
+                       y_pred - confidence_intervals,
+                       y_pred + confidence_intervals, 
+                       color='#d62728', alpha=0.2, 
+                       label='95% Confidence interval')
+        
+        # Plot prediction interval (for individual observations)
+        plt.fill_between(x_range, 
+                       y_pred - prediction_intervals,
+                       y_pred + prediction_intervals, 
+                       color='blue', alpha=0.1, 
+                       label='95% Prediction interval')
+                        
+        plt.xlabel(args.response_var)
+        plt.ylabel(args.inferred_var)
+        plt.title(f"Calibration Curve (R-squared: {r_squared:.2f})")
+        plt.legend()
+        plt.grid(axis='both')
+        plt.tight_layout()
+    else:
+        do_calibration = False
+        x = response_var_norm if args.normalize_response_var else args.response_var
+    
+    if do_calibration:
+        df_dose[y] = model.predict(df_dose[[x]])
 
     # Plot heatmap of (normalized) responses
-    y = response_var_norm if args.normalize_response_var else args.response_var
     n_groups = df_dose.groupby(args.groupby_vars).ngroups
     n_rows = np.ceil(np.sqrt(n_groups)).astype(int)
     n_cols = np.ceil(n_groups / n_rows).astype(int)
@@ -313,12 +353,12 @@ def main(args):
         axes = axes.flatten()
     else:
         axes = [axes]
-    vmin = df_dose[y].min()
-    vmax = df_dose[y].max()
+    vmin = df_dose[x].min()
+    vmax = df_dose[x].max()
     for ax, (group_name, df_group) in zip(axes, df_dose.groupby(args.groupby_vars)):
         group_name = group_name
         df_p_pivot = df_group.pivot_table(
-            values=y,
+            values=x,
             index=args.row_var,
             columns=args.col_var,
             aggfunc='mean',
@@ -326,7 +366,7 @@ def main(args):
             dropna=False)
         sns.heatmap(df_p_pivot, ax=ax, cmap='RdBu_r', vmin=vmin, vmax=vmax)
         ax.set_title(group_name)
-    plt.suptitle(f'{y} heatmap')
+    plt.suptitle(f'{x} heatmap')
     plt.tight_layout()
 
     # Get the compounds
@@ -339,9 +379,9 @@ def main(args):
     conditions = df_dose[condition_vars_no_dose].drop_duplicates()
     n_conditions = len(conditions)
 
-    # Plot the dose response curve for different compounds
+    # Plot the dose-response curve for conditions
     x = args.dose_var
-    y = args.response_var_norm if args.normalize_response_var else args.response_var
+    y = response_var_norm if args.normalize_response_var else args.response_var
     n_rows = np.ceil(np.sqrt(n_conditions)).astype(int)
     n_cols = np.ceil(n_conditions / n_rows).astype(int)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(9, 9))
@@ -361,13 +401,12 @@ def main(args):
         ax.grid(True)
     plt.tight_layout()
 
-    # Plot the predicted density
+    # Plot the inferred dose-response
     if do_calibration:
         x = args.dose_var
         y = args.inferred_var
         y_range = df_dose[y].max() - df_dose[y].min()
         y_margin = y_range * 0.1 if not args.log_scale_y else 0
-        print(df_dose[y].min(), df_dose[y].max());
         y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
         x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1 if not args.log_scale_x else 0
         n_rows = np.ceil(np.sqrt(n_conditions)).astype(int)
@@ -398,7 +437,7 @@ def main(args):
     if do_calibration:
         y = args.inferred_var
     else:
-        y = args.response_var_norm if args.normalize_response_var else args.response_var
+        y = response_var_norm if args.normalize_response_var else args.response_var
     y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
     ic_percentile = args.ic_percentile
     threshold_pct = args.threshold_pct
