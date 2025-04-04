@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 from matplotlib import pyplot as plt
 import seaborn as sns
 import re
-from sys_micro_pytools.df import plate_grid2layout
+from sys_micro_pytools.df import plate_grid2table
 from sys_micro_pytools.visualize import get_nice_ticks
 
 def calibration_curve(df: pd.DataFrame, x_col: str, y_col: str) -> pd.DataFrame:
@@ -206,34 +206,32 @@ def main(args):
         # Read the calibration data
         filename_cal = Path(args.filename_cal)
         df_cal = pd.read_csv(filename_cal, header=0, index_col=False)
-        df_cal[args.dose_var] = df_cal[args.dose_var].astype(float)
+        #df_cal[args.dose_var] = df_cal[args.dose_var].astype(float)
         df_cal[args.response_var] = df_cal[args.response_var].astype(float)
         
         # Calculate the calibration curve
-        model = calibration_curve(df_cal, args.inferred_var, args.response_var)
+        model = calibration_curve(df_cal, args.response_var, args.inferred_var)
         print(model.coef_)
         slope = model.coef_[0][0]
         intercept = model.intercept_[0]
-        eq = f"y = {slope:.5f}x + {intercept:.5f}"
-        r_squared = model.score(df_cal[[args.inferred_var]], df_cal[args.response_var])
-
+        r_squared = model.score( df_cal[[args.response_var]], df_cal[[args.inferred_var]])
+        eq = f"y = {slope:.5f}x + {intercept:.5f} (R² = {r_squared:.2f})"
+        
         # Calculate the standard error
-        y_pred_train = model.predict(df_cal[[args.inferred_var]])
-        residuals = df_cal[args.response_var].values - y_pred_train.flatten()
+        y_pred_train = model.predict(df_cal[[args.response_var]])
+        residuals = df_cal[args.inferred_var].values - y_pred_train.flatten()
         residual_std = np.sqrt(np.sum(residuals ** 2) / (len(df_cal) - 2))
-        x_mean = np.mean(df_cal[args.inferred_var])
-        x_std = np.sum((df_cal[args.inferred_var] - x_mean)**2)
-        x_range = np.linspace(df_cal[args.inferred_var].min(), df_cal[args.inferred_var].max(), 100)
+        x_mean = np.mean(df_cal[args.response_var])
+        x_std = np.sum((df_cal[args.response_var] - x_mean)**2)
+        x_range = np.linspace(df_cal[args.response_var].min(), df_cal[args.response_var].max(), 100)
         y_pred = model.predict(x_range.reshape(-1, 1)).flatten()
         std_error = residual_std * np.sqrt(1 + 1/len(df_cal) + (x_range - x_mean)**2 / x_std)
-
-        print(f"Standard error: {residual_std:.2f}")
 
         # Plot the calibration curve
         df_cal[args.inferred_var] = model.predict(df_cal[[args.response_var]])
         plt.figure(figsize=(10, 8))
         sns.scatterplot(data=df_cal, x=args.response_var, y=args.inferred_var, color='black', label='Observed data')
-        sns.lineplot(x=df_cal[args.inferred_var], y=df_cal[args.response_var], color='red', label=eq)
+        sns.lineplot(x=df_cal[args.response_var], y=df_cal[args.inferred_var], color='red', label=eq)
         plt.fill_between(x_range, y_pred - 1.96*std_error, y_pred + 1.96*std_error, 
                         color='#d62728', alpha=0.2, label='95% Confidence interval')
         plt.xlabel(args.response_var)
@@ -250,8 +248,8 @@ def main(args):
     dfs_dose = []
     for i, filename_dose in enumerate(filenames_dose):
         df_dose = pd.read_csv(filename_dose, header=0, index_col=False)
-        if args.grid2list:
-            df_dose = plate_grid2layout(df_dose)
+        if args.grid2table:
+            df_dose = plate_grid2table(df_dose)
         if args.var2add is not None and args.var2add_value is not None:
             # Add the variable to the dose response data
             df_dose[args.var2add] = args.var2add_value[i]
@@ -279,7 +277,7 @@ def main(args):
     df_dose[args.dose_var] = df_dose[args.dose_var].astype(float)
     df_dose[args.response_var] = df_dose[args.response_var].astype(float)
     if do_calibration:
-        df_dose[args.inferred_var] = (df_dose[args.response_var] - intercept) / slope
+        df_dose[args.inferred_var] = model.predict(df_dose[[args.response_var]])
 
     # Get DMSO controls
     control_query = ' and '.join(
@@ -311,7 +309,10 @@ def main(args):
     n_rows = np.ceil(np.sqrt(n_groups)).astype(int)
     n_cols = np.ceil(n_groups / n_rows).astype(int)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 8))
-    axes = axes.flatten()
+    if isinstance(axes, np.ndarray):
+        axes = axes.flatten()
+    else:
+        axes = [axes]
     vmin = df_dose[y].min()
     vmax = df_dose[y].max()
     for ax, (group_name, df_group) in zip(axes, df_dose.groupby(args.groupby_vars)):
@@ -366,6 +367,7 @@ def main(args):
         y = args.inferred_var
         y_range = df_dose[y].max() - df_dose[y].min()
         y_margin = y_range * 0.1 if not args.log_scale_y else 0
+        print(df_dose[y].min(), df_dose[y].max());
         y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
         x_margin = (df_dose[x].max() - df_dose[x].min()) * 0.1 if not args.log_scale_x else 0
         n_rows = np.ceil(np.sqrt(n_conditions)).astype(int)
@@ -393,7 +395,10 @@ def main(args):
 
     # Calculate and plot IC50 for each compound
     x = args.dose_var
-    y = args.response_var_norm if args.normalize_response_var else args.response_var
+    if do_calibration:
+        y = args.inferred_var
+    else:
+        y = args.response_var_norm if args.normalize_response_var else args.response_var
     y_start, y_stop, y_step = get_nice_ticks(df_dose[y].min(), df_dose[y].max())
     ic_percentile = args.ic_percentile
     threshold_pct = args.threshold_pct
@@ -445,8 +450,8 @@ def main(args):
             ax.text(0.5, 0.5, f"No valid IC{ic_percentile}\n({status})", 
                 transform=ax.transAxes, ha='center', fontsize=10,
                 bbox=dict(facecolor='white', alpha=0.8))
-        ax.set_xlim(df_grouped[x].min(), df_grouped[x].max())
-        ax.set_ylim(df_grouped['mean'].min(), df_grouped['mean'].max())
+        ax.set_xlim(df_group[x].min(), df_group[x].max())
+        ax.set_ylim(df_group[y].min(), df_group[y].max())
         ax.set_yticks(np.arange(y_start, y_stop, y_step))
         ax.set_xscale('log' if args.log_scale_x else 'linear')
         ax.set_yscale('log' if args.log_scale_y else 'linear')
@@ -476,8 +481,8 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument('--filename_dose', type=Path, nargs='+', required=True,
                         help='Path(s) to dose response data')
-    parser.add_argument('--grid2list', action='store_true', default=False,
-                        help='Convert dose response data from grid to list format')
+    parser.add_argument('--grid2table', action='store_true', default=False,
+                        help='Convert dose response data from grid to table format')
     parser.add_argument('--var2add', type=str, default=None,
                         help='Variable to add to the dose response data')
     parser.add_argument('--var2add_value', type=str, nargs='*', default=None,

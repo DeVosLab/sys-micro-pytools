@@ -34,7 +34,7 @@ def get_nice_ticks(data_min, data_max):
     normalized_range = data_range / (10 ** magnitude)
     
     # Candidate intervals
-    candidates = np.array([1, 2, 5, 10])
+    candidates = np.array([0.25, 0.5, 1, 2, 4, 5, 10])
     # We want 4-10 tick marks, so divide range by these numbers
     n_ticks = normalized_range / candidates
     # Find the step that gives us a good number of ticks
@@ -48,7 +48,7 @@ def get_nice_ticks(data_min, data_max):
     
     # Calculate start and stop
     start = np.floor(data_min / step) * step
-    stop = np.ceil(data_max / step) * step
+    stop = np.ceil(data_max / step) * step + step
     
     return start, stop, step
 
