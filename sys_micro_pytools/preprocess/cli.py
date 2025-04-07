@@ -16,7 +16,7 @@ def preprocess():
 @preprocess.command()
 @click.option('-i', '--input-path', type=click.Path(exists=True), required=True, 
               help='Path to the input images')
-@click.option('-o', '--output-path', type=click.Path(exists=True), required=True,
+@click.option('-o', '--output-path', type=click.Path(), required=True,
               help='Path to save the flat field')
 @click.option('--suffix', type=click.STRING, default='.nd2',
               help='Suffix of the input images')
