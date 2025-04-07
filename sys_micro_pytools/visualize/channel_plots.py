@@ -104,7 +104,7 @@ def create_channel_plots(
         if patterns2have is not None and not any([x in str(file.stem) for x in patterns2have]):
             continue
 
-        img = read_tiff_or_nd2(file, bundle_axes='cyx' if img_type == 'grayscale' else 'yx').astype(float)
+        img = read_tiff_or_nd2(file, bundle_axes='cyx' if img_type == 'multichannel' else 'yx').astype(float)
         
         if flat_field is not None:
             img = flat_field_correction(img, flat_field)
@@ -172,7 +172,7 @@ def create_channel_plots(
             _, axes = plt.subplots(1, 1, figsize=(9, 9))
             filename = Path(output_path_composite).joinpath(f'{file.stem}.tif')
             filename.parent.mkdir(exist_ok=True)
-            img_composite = np.moveaxis(img_composite.astype(np.float32), 2, 0)
+            img_composite = np.moveaxis(img_composite.astype(np.float32), 0, 2)
             tifffile.imwrite(
                 str(filename),
                 img_composite,
