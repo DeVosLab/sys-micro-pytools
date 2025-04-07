@@ -16,7 +16,7 @@ from sys_micro_pytools.visualize import create_palette
 
 def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str,
                   filename_well_idx: Union[list, tuple], filename_field_idx: Union[list, tuple],
-                  skip_wells: Union[list, tuple]) -> pd.DataFrame:
+                  skip_wells: Union[list, tuple], plate_id: str = None, rep_id: str = None) -> pd.DataFrame:
     ''' Get dataframe with image information
 
     Parameters
@@ -33,6 +33,10 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
         Start and stop indices of the field number in the filename
     skip_wells : list or tuple
         List of wells to skip
+    plate_id : str
+        Plate ID to use. Overwrites plate_layout automatically found plate ID to use.
+    rep_id : str
+        Rep ID to use. Overwrites plate_layout automatically found rep ID to use.
 
     Returns
     -------
@@ -55,8 +59,14 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
         # Use re.findall to extract numbers after "plate" and "R"
         plate_pattern = r'plate([A-Za-z0-9]+)'
         r_pattern = r'R(\d+)'
-        plate_id = re.findall(plate_pattern, dir.stem)[0] if 'plate' in dir.stem else 1
-        rep_id = re.findall(r_pattern, dir.stem)[0] if dir.stem[-2] == 'R' else 1
+        if plate_id is None:
+            plate_id = re.findall(plate_pattern, dir.stem)[0] if 'plate' in dir.stem else 1
+        else:
+            plate_id = plate_id
+        if rep_id is None:
+            rep_id = re.findall(r_pattern, dir.stem)[0] if dir.stem[-2] == 'R' else 1
+        else:
+            rep_id = rep_id
 
         files = sorted([f for f in dir.iterdir() if f.suffix == suffix and not f.name.startswith('.')])
         wells = [f.stem[filename_well_idx[0]:filename_well_idx[1]] for f in files]
@@ -310,7 +320,9 @@ def main(**kwargs):
         kwargs['suffix'],
         kwargs['filename_well_idx'],
         kwargs['filename_field_idx'],
-        kwargs['skip_wells']
+        kwargs['skip_wells'],
+        kwargs['plate_id'],
+        kwargs['rep_id']
     )
     df_images.columns = [col.capitalize() for col in df_images.columns]
     df_images['Plate'] = df_images['Plate'].astype(str)
@@ -401,6 +413,12 @@ def parse_args():
         help='DPI for output figures')
     parser.add_argument('--save_csv', action='store_true', default=False,
         help='Whether to save counts to CSV file')
+    parser.add_argument('--plate_id', type=str, default=None,
+        help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. ',
+              'This is useful if the plate ID is not in the filename.'))
+    parser.add_argument('--rep_id', type=str, default=None,
+        help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. ',
+              'This is useful if the rep ID is not in the filename.'))
     args = parser.parse_args()
     
     return args
