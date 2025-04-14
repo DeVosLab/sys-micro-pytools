@@ -29,9 +29,9 @@ def cli():
 
 
 @cli.command(name='channel-plots')
-@click.option('--input_path', '-i', type=click.Path(exists=True), required=True,
+@click.option( '-i', '--input_path', type=click.Path(exists=True), required=True,
               help='Path to directory containing images')
-@click.option('--output_path', '-o', type=click.Path(), required=True,
+@click.option( '-o', '--output_path', type=click.Path(), required=True,
               help='Path to directory where output will be saved')
 @click.option('--img_type', type=click.Choice(['multichannel', 'grayscale']), required=True,
               help='Type of image to plot. Options: multichannel, grayscale')
