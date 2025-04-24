@@ -1,6 +1,16 @@
 import click
 from functools import partial
+from pathlib import Path
+import tifffile
+import pandas as pd
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from sys_micro_pytools.preprocess.flat_field import get_flat_field_files
+from sys_micro_pytools.df import link_df2plate_layout
+from sys_micro_pytools.visualize import create_palette
 from .channel_plots import create_channel_plots
+from .grid_plots import get_df_images, create_grid_plot
+
 
 def empty_to_none(ctx, param, value):
     if value == ():
@@ -104,6 +114,144 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
         field_idx=field_idx,
         output_type=output_type
     )
+
+@cli.command(name='grid-plot')
+@click.option( '-i', '--input_path', type=click.Path(exists=True), required=True,
+              help='Path to directory containing images')
+@click.option( '-o', '--output_path', type=click.Path(), required=True,
+              help='Path to directory where output will be saved')
+@click.option('--plate_layout', type=click.Path(), required=True,
+              help='Path to plate layout file')
+@click.option('--suffix', type=str, default='.nd2',
+              help='Suffix of image files')
+@click.option('--filename_well_idx', type=int, multiple=True, default=(4,7), 
+              callback=partial(validate_max_items, count=2),
+              help='Start and stop indices of the well name in the filename (default: (4,7))')
+@click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
+              callback=partial(validate_max_items, count=2),
+              help='Start and stop indices of the field number in the filename (default: (17,21))')
+@click.option('--skip_wells', type=str, multiple=True, callback=empty_to_none,
+              help='List of wells to skip')
+@click.option('--img_type', type=click.Choice(['multichannel', 'grayscale', 'mask']), required=True,
+              help='Type of image to plot. Options: multichannel, grayscale, mask')
+@click.option('--channels2use', type=int, multiple=True, default=(0,),
+              help='Channels to use for making the plots')
+@click.option('--ref_wells', type=str, multiple=True, callback=empty_to_none,
+            help='Well(s) to use as reference for normalization using its percentiles')
+@click.option('--masks', is_flag=True,
+              help='Indicate that image is a mask. FF correction will not be applied')
+@click.option('--flat_field_path', type=click.Path(), default=None,
+              help='Path to image to use as flat field correction')
+@click.option('--cmap', type=str, default='cet_glasbey',
+              help='Color map to use image borders in grid plot')
+@click.option('--condition_vars', type=str, multiple=True, default=('Treat', 'Dose'),
+              help='Variables to use for color encoding')
+@click.option('--conditions2remove', type=str, multiple=True, callback=empty_to_none,
+              help='List of condition combinations to remove from the palette, e.g. --conditions2remove "DMSO,L"')
+@click.option('--check_batches', is_flag=True,
+              help='Check if input_path contains subdirectories')
+@click.option('--field_idx', type=int, multiple=True, default=None,
+              help='Index of the field to plot for each well. If None, a random field will be selected')
+def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx, 
+                         filename_field_idx, skip_wells, img_type, channels2use, ref_wells, 
+                         masks, flat_field_path, cmap, condition_vars, conditions2remove, 
+                         check_batches, field_idx):
+    """Main function that processes command line arguments and calls create_grid_plot."""
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(skip_wells, str):
+        skip_wells = [skip_wells]
+
+    if isinstance(condition_vars, str):
+        condition_vars = [condition_vars]
+    
+    if conditions2remove is not None:
+        conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
+
+    if isinstance(field_idx, int):
+        field_idx = [field_idx]
+    for idx in field_idx:
+        assert idx >= 0, 'field_idx must be a positive integer'
+
+    # Set color palette for treatments
+    plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python'); 
+    plate_layout.columns = [col.capitalize() for col in plate_layout.columns]
+    plate_layout['Plate'] = plate_layout['Plate'].astype(str)
+    plate_layout['Well'] = plate_layout['Well'].astype(str)
+    plate_layout['Row'] = plate_layout['Row'].astype(str)
+    plate_layout['Col'] = plate_layout['Col'].astype(int)
+
+    # Set color palette
+    palette, _ = create_palette(
+        plate_layout,
+        condition_vars=condition_vars,
+        cmap=cmap,
+        conditions2remove=conditions2remove,
+    )
+
+    # Get flat field images
+    if flat_field_path is not None:
+        flat_field_files = get_flat_field_files(flat_field_path)
+    else:
+        flat_field_files = None
+    
+    # Image path
+    input_path = Path(input_path)
+    df_images = get_df_images(
+        input_path,
+        check_batches,
+        suffix,
+        filename_well_idx,
+        filename_field_idx,
+        skip_wells
+    )
+    df_images.columns = [col.capitalize() for col in df_images.columns]
+    df_images['Plate'] = df_images['Plate'].astype(str)
+    df_images['Well'] = df_images['Well'].astype(str)
+    df_images['Row'] = df_images['Row'].astype(str)
+    df_images['Col'] = df_images['Col'].astype(int)
+    df_images['Field'] = df_images['Field'].astype(int)
+
+    # Merge plate layout with df_images
+    df_images = link_df2plate_layout(df_images, plate_layout)
+
+    # Plot a single image per row/col combination
+    for dir in tqdm(sorted(df_images['Dir'].unique())):
+        # Load flat field
+        if flat_field_files is not None:
+            flat_field_file = [f for f in flat_field_files if Path(dir).stem in f.stem and 'FF' in f.stem][0]
+            flat_field = tifffile.imread(str(flat_field_file)).astype(float)
+        else:
+            flat_field = None
+
+        df_dir = df_images[df_images['Dir'] == dir]
+
+        fig = create_grid_plot(
+            df_dir,
+            flat_field,
+            condition_vars,
+            palette,
+            field_idx=field_idx,
+            img_type=img_type,
+            channels2use=channels2use,
+            title=dir
+        )
+
+        # Save figure
+        filename = Path(output_path).joinpath(f'{dir}.jpg')
+        filename.parent.mkdir(exist_ok=True, parents=True)
+        print(f'Saving figure to {filename}')
+        fig.savefig(filename, dpi=600)
+        plt.close()
+
+
+
+
+
+
+
 
 if __name__ == '__main__':
     cli()
