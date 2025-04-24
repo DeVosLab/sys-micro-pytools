@@ -289,10 +289,10 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
 @click.option('--save_csv', is_flag=True,
               help='Whether to save counts to CSV file')
 @click.option('--plate_id', type=str, default=None,
-              help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. ',
+              help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. '
                     'This is useful if the plate ID is not in the filename.'))
 @click.option('--rep_id', type=str, default=None,
-              help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. ',
+              help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. '
                     'This is useful if the rep ID is not in the filename.'))
 def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx, 
                          filename_field_idx, skip_wells, cmap, condition_vars, conditions2remove, 
@@ -386,16 +386,6 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
             csv_filename = output_path.joinpath(f'{dir}_counts.csv')
             df_dir.to_csv(csv_filename, index=False)
             print(f'Saved counts to {csv_filename}')
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == '__main__':
     cli()
