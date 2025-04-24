@@ -13,20 +13,20 @@ def empty_to_none(ctx, param, value):
 def preprocess():
     pass
 
-@preprocess.command()
-@click.option('-i', '--input-path', type=click.Path(exists=True), required=True, 
+@preprocess.command(name='flat-field')
+@click.option('-i', '--input_path', type=click.Path(exists=True), required=True, 
               help='Path to the input images')
-@click.option('-o', '--output-path', type=click.Path(), required=True,
+@click.option('-o', '--output_path', type=click.Path(), required=True,
               help='Path to save the flat field')
 @click.option('--suffix', type=click.STRING, default='.nd2',
               help='Suffix of the input images')
 @click.option('--sigma', type=click.FLOAT, default=90,
               help='Sigma of the Gaussian blur filter')
-@click.option('--n-images', type=click.INT, default=None,
+@click.option('--n_images', type=click.INT, default=None,
               help='Number of images to use to generate the flat field')
-@click.option('--from-well', type=click.STRING, default=None,
+@click.option('--from_well', type=click.STRING, default=None,
               help='Well to use to generate the flat field. If None, use n random images from the input path to generate the flat field')
-@click.option('--skip-wells', type=click.STRING, multiple=True, callback=empty_to_none,
+@click.option('--skip_wells', type=click.STRING, multiple=True, callback=empty_to_none,
               help='Wells to ignore when generating the flat field. If None, use all wells.')
 @click.option('--grayscale', is_flag=True, default=False,
               help='Use grayscale images instead of RGB images.')
