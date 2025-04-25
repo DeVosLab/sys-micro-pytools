@@ -8,9 +8,9 @@ from tqdm import tqdm
 from sys_micro_pytools.preprocess.flat_field import get_flat_field_files
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.visualize import create_palette
-from .channel_plots import create_channel_plots
-from .grid_plots import get_df_images, create_grid_plot
-from .count_plots import count_objects_in_mask, create_count_df, create_count_plot
+from sys_micro_pytools.visualize.channel_plots import create_channel_plots
+from sys_micro_pytools.visualize.grid_plots import get_df_images, create_grid_plot
+from sys_micro_pytools.visualize.count_plots import count_objects_in_mask, create_count_df, create_count_plot
 
 def empty_to_none(ctx, param, value):
     if value == ():
@@ -43,8 +43,8 @@ def cli():
               help='Path to directory containing images')
 @click.option( '-o', '--output_path', type=click.Path(), required=True,
               help='Path to directory where output will be saved')
-@click.option('--img_type', type=click.Choice(['multichannel', 'grayscale']), required=True,
-              help='Type of image to plot. Options: multichannel, grayscale')
+@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale']), required=True,
+              help='Type of image to plot. Options: multi_channel, grayscale')
 @click.option('--channels2use', type=int, multiple=True, default=(0,),
               help='Channels to use for making the plots')
 @click.option('--suffix', type=str, default='.nd2',
@@ -130,10 +130,10 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
 @click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
               callback=partial(validate_max_items, count=2),
               help='Start and stop indices of the field number in the filename (default: (17,21))')
-@click.option('--skip_wells', type=str, multiple=True, callback=empty_to_none,
+@click.option('--skip_wells', type=str, multiple=True, default=[],
               help='List of wells to skip')
-@click.option('--img_type', type=click.Choice(['multichannel', 'grayscale', 'mask']), required=True,
-              help='Type of image to plot. Options: multichannel, grayscale, mask')
+@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale', 'mask']), required=True,
+              help='Type of image to plot. Options: multi_channel, grayscale, mask')
 @click.option('--channels2use', type=int, multiple=True, default=(0,),
               help='Channels to use for making the plots')
 @click.option('--ref_wells', type=str, multiple=True, callback=empty_to_none,
@@ -262,7 +262,7 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
 @click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
               callback=partial(validate_max_items, count=2),
               help='Start and stop indices of the field number in the filename (default: (17,21))')
-@click.option('--skip_wells', type=str, multiple=True, callback=empty_to_none,
+@click.option('--skip_wells', type=str, multiple=True, default=[],
               help='List of wells to skip')
 @click.option('--cmap', type=str, default='cet_glasbey',
               help='Color map to use for boxplots')
