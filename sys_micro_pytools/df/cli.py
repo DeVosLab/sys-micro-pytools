@@ -34,16 +34,18 @@ def df():
               help="Whether to add annotations to the heatmap.")
 @click.option('--numeric_vars', type=click.STRING, multiple=True, callback=empty_to_none,
               help="Variables to be treated as numeric in the visualization.")
+@click.option('--remove_rows_with_na', is_flag=True,
+              help="Whether to remove rows with NA values from the dataframe.")
 def plate_grid2table_cli(input_path, output_path, filename, visualize, plate_id, 
                          row_categories, col_categories, var_order, ncols, 
-                         add_annot, numeric_vars):
+                         add_annot, numeric_vars, remove_rows_with_na):
     """Convert a plate layout provided as grids in a .xlsx file(s) into a table in a .csv file.
 
     INPUT_PATH: Path to the CSV or Excel file(s) containing the plate layouts.
     OUTPUT_PATH: Path to save the merged layout dataframe.
     """
     # Merge the plate layouts into a single dataframe
-    df = plate_grid2table(input_path)
+    df = plate_grid2table(input_path, remove_rows_with_na)
 
     # Save the merged layout dataframe
     if output_path:

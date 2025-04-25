@@ -163,7 +163,7 @@ def plot_layout(df, selected_plate, row_categories=None, col_categories=None,
     plt.show()
 
 
-def plate_grid2table(paths: Union[List[Union[str, Path]], Union[str, Path]]) -> pd.DataFrame:
+def plate_grid2table(paths: Union[List[Union[str, Path]], Union[str, Path]], remove_rows_with_na: bool = False) -> pd.DataFrame:
     ''' Merge multiple well plate layouts into a single dataframe, considering multiple files or multiple sheets.
         
         Each layout is a N x M matrix in which the first row is the header (column names)
@@ -217,5 +217,9 @@ def plate_grid2table(paths: Union[List[Union[str, Path]], Union[str, Path]]) -> 
         aggfunc='first'
         ).reset_index()
     final_df.columns.name = None  # Remove the hierarchy in the columns
+
+    # Remove rows with NA values if specified
+    if remove_rows_with_na:
+        final_df = final_df[~final_df.isna().all(axis=1)]
 
     return final_df
