@@ -43,7 +43,7 @@ def cli():
               help='Path to directory containing images')
 @click.option( '-o', '--output_path', type=click.Path(), required=True,
               help='Path to directory where output will be saved')
-@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale']), required=True,
+@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale']), default='grayscale',
               help='Type of image to plot. Options: multi_channel, grayscale')
 @click.option('--channels2use', type=int, multiple=True, default=(0,),
               help='Channels to use for making the plots')
@@ -132,7 +132,7 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help='Start and stop indices of the field number in the filename (default: (17,21))')
 @click.option('--skip_wells', type=str, multiple=True, default=[],
               help='List of wells to skip')
-@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale', 'mask']), required=True,
+@click.option('--img_type', type=click.Choice(['multi_channel', 'grayscale', 'mask']), default='grayscale',
               help='Type of image to plot. Options: multi_channel, grayscale, mask')
 @click.option('--channels2use', type=int, multiple=True, default=(0,),
               help='Channels to use for making the plots')
