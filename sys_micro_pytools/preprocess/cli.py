@@ -1,7 +1,7 @@
 import click
 from pathlib import Path
-from sys_micro_pytools.preprocess.flat_field import compute_flat_field
 import tifffile
+from sys_micro_pytools.preprocess.flat_field import compute_flat_field
 
 
 def empty_to_none(ctx, param, value):
