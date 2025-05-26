@@ -220,6 +220,6 @@ def plate_grid2table(paths: Union[List[Union[str, Path]], Union[str, Path]], rem
 
     # Remove rows with NA values if specified
     if remove_rows_with_na:
-        final_df = final_df[~final_df.isna().all(axis=1)]
+        final_df = final_df[~final_df.isna().any(axis=1)]
 
     return final_df
