@@ -5,12 +5,13 @@ import tifffile
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+
 from sys_micro_pytools.preprocess.flat_field import get_flat_field_files
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.visualize import create_palette
 from sys_micro_pytools.visualize.channel_plots import create_channel_plots
 from sys_micro_pytools.visualize.grid_plots import get_df_images, create_grid_plot
-from sys_micro_pytools.visualize.count_plots import count_objects_in_mask, create_count_df, create_count_plot
+from sys_micro_pytools.visualize.count_plots import create_count_df, create_count_plot
 
 def empty_to_none(ctx, param, value):
     if value == ():
@@ -236,6 +237,7 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
             field_idx=field_idx,
             img_type=img_type,
             channels2use=channels2use,
+            ref_wells=ref_wells,
             title=dir
         )
 
