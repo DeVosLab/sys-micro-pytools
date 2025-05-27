@@ -1,4 +1,4 @@
-from typing import Union, Literal
+from typing import Union, Literal, Optional
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -15,9 +15,9 @@ from sys_micro_pytools.preprocess.flat_field import flat_field_correction
 from sys_micro_pytools.preprocess.composite import create_composite
 
 
-def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str,
-                  filename_well_idx: Union[list, tuple], filename_field_idx: Union[list, tuple],
-                  skip_wells: Union[list, tuple]) -> pd.DataFrame:
+def get_df_images(input_path: str | Path, check_batches: bool, suffix: str,
+                  filename_well_idx: list | tuple, filename_field_idx: list | tuple,
+                  skip_wells: list | tuple, plate_id: str | None=None, rep_id: str | None=None) -> pd.DataFrame:
     ''' Get dataframe with image information
 
     Parameters
@@ -47,6 +47,9 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
     assert isinstance(filename_well_idx, (list, tuple)), 'filename_well_idx must be a list or tuple'
     assert isinstance(filename_field_idx, (list, tuple)), 'filename_field_idx must be a list or tuple'
     assert isinstance(skip_wells, (list, tuple)), 'skip_wells must be a list or tuple'
+    assert isinstance(plate_id, (str, type(None))), 'plate_id must be a string or None'
+    assert isinstance(rep_id, (str, type(None))), 'rep_id must be a string or None'
+
 
     input_path = Path(input_path)
     dirs = [d for d in input_path.iterdir() if d.is_dir()] if check_batches else [input_path]
@@ -55,10 +58,12 @@ def get_df_images(input_path: Union[str, Path], check_batches: bool, suffix: str
     df_images = pd.DataFrame()
     for dir in dirs:
         # Use re.findall to extract numbers after "plate" and "R"
-        plate_pattern = r'plate([A-Za-z0-9]+)'
-        r_pattern = r'R(\d+)'
-        plate_id = re.findall(plate_pattern, dir.stem)[0] if 'plate' in dir.stem else 1
-        rep_id = re.findall(r_pattern, dir.stem)[0] if dir.stem[-2] == 'R' else 1
+        if plate_id is None:
+            plate_pattern = r'plate([A-Za-z0-9]+)'
+            plate_id = re.findall(plate_pattern, dir.stem)[0] if 'plate' in dir.stem else 1
+        if rep_id is None:
+            r_pattern = r'R(\d+)'
+            rep_id = re.findall(r_pattern, dir.stem)[0] if dir.stem[-2] == 'R' else 1
 
         files = sorted([f for f in dir.iterdir() if f.suffix == suffix and not f.name.startswith('.')])
         wells = [f.stem[filename_well_idx[0]:filename_well_idx[1]] for f in files]

@@ -153,10 +153,16 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help='Check if input_path contains subdirectories')
 @click.option('--field_idx', type=int, multiple=True, default=None,
               help='Index of the field to plot for each well. If None, a random field will be selected')
+@click.option('--plate_id', type=str, default=None,
+              help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. '
+                    'This is useful if the plate ID is not in the filename.'))
+@click.option('--rep_id', type=str, default=None,
+              help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. '
+                    'This is useful if the rep ID is not in the filename.'))
 def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx, 
                          filename_field_idx, skip_wells, img_type, channels2use, ref_wells, 
                          masks, flat_field_path, cmap, condition_vars, conditions2remove, 
-                         check_batches, field_idx):
+                         check_batches, field_idx, plate_id, rep_id):
     """Main function that processes command line arguments and calls create_grid_plot."""
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -206,7 +212,9 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
         suffix,
         filename_well_idx,
         filename_field_idx,
-        skip_wells
+        skip_wells,
+        plate_id,
+        rep_id
     )
     df_images.columns = [col.capitalize() for col in df_images.columns]
     df_images['Plate'] = df_images['Plate'].astype(str)
