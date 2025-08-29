@@ -7,7 +7,7 @@ o   show the main window, which starts the event loop
 
 import sys
 from PySide6.QtWidgets import QApplication
-from gui.main_window import MainWindow
+from gui.windows.main_window import MainWindow
 
 if __name__ == '__main__':
 

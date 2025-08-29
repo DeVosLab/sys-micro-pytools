@@ -16,7 +16,6 @@ from sys_micro_pytools.visualize import create_palette
 from sys_micro_pytools.visualize.grid_plots import get_df_images
 from sys_micro_pytools.visualize.count_plots import create_count_df, create_count_plot
 
-## COUNT PLOT OPTIONS BELOW ##
 class CountPlotWindow(QWidget):
     """Window for count plot visualisation tool."""
 
@@ -25,6 +24,8 @@ class CountPlotWindow(QWidget):
         self.setWindowTitle("Count Plot")
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Count Plot Options"))
+
+        ## COUNT PLOT OPTIONS BELOW ##
 
         # select path to input file
         self.input_path_btn = QPushButton('Select input file')

@@ -18,7 +18,7 @@ from sys_micro_pytools.df.plate_grid2table import plate_grid2table
 from sys_micro_pytools.measure import calibration_curve, calculate_ic_value
 from sys_micro_pytools.visualize import get_nice_ticks
 
-class MeasureDoseResponseWindow(QWidget):
+class DoseResponseWindow(QWidget):
     """Window for measuring dose response."""
 
     def __init__(self, back):
