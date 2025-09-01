@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox, QSpinBox, QMessageBox, QComboBox
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
+    QSpinBox, QMessageBox, QComboBox, QProgressBar)
 
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.df.plate_grid2table import plate_grid2table, plot_layout
@@ -1098,10 +1100,10 @@ class GridPlotWindow(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Grid Plot Options"))
 
-        # select path to input file
-        self.input_path_btn = QPushButton('Select input file')
-        self.input_path_btn.clicked.connect(self.select_input_file)
-        self.input_path_label = QLabel('No file selected')
+        # select path to input folder
+        self.input_path_btn = QPushButton('Select input folder')
+        self.input_path_btn.clicked.connect(self.select_input_folder)
+        self.input_path_label = QLabel('No folder selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)
 
@@ -1211,13 +1213,13 @@ class GridPlotWindow(QWidget):
         self.setLayout(layout)
 
     # specifies to load in the files and folder
-    def select_input_file(self):
-        input_file, _ = QFileDialog.getOpenFileName(self, 'Select input file')
-        if input_file:
-            self.input_path_label.setText(input_file)
+    def select_input_folder(self):
+        input_folder = QFileDialog.getExistingDirectory(self, 'Select input folder')
+        if input_folder:
+            self.input_path_label.setText(input_folder)
 
     def select_output_folder(self):
-        output_folder, _ = QFileDialog.getExistingDirectory(self, 'Select output folder')
+        output_folder = QFileDialog.getExistingDirectory(self, 'Select output folder')
         if output_folder:
             self.output_path_label.setText(output_folder)
 
@@ -1257,10 +1259,10 @@ class GridPlotWindow(QWidget):
         conditions2remove = self.conditions2remove_line.text().split(',') if self.conditions2remove_line.text() else None
 
         # convert strings to integers
-        well_idx = int(self.well_idx_line.text().split(','))
-        field_idx = int(self.field_idx_line.text().split(','))
-        channels2use = int(self.channels2use_line.text().split(',')) if self.channels2use_line.text() else 0
-        field_plot = int(self.field_plot_line.text()) if self.field_plot_line.text() else None
+        well_idx = [int(x) for x in self.well_idx_line.text().split(',')]
+        field_idx = [int(x) for x in self.field_idx_line.text().split(',')]
+        channels2use = [int(x) for x in self.channels2use_line.text().split(',')] if self.channels2use_line.text() else 0
+        field_plot = [int(x) for x in self.field_plot_line.text()] if self.field_plot_line.text() else None
 
         try:
             input_path = Path(input_path)
@@ -1384,6 +1386,7 @@ several parameters/options to customise programme settings:
                                                     optional*
 =============================================================
 """
+    
 class ChannelPlotWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
@@ -1391,10 +1394,10 @@ class ChannelPlotWindow(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Channel Plot Options"))
 
-        # select path to input file
-        self.input_path_btn = QPushButton('Select input file')
-        self.input_path_btn.clicked.connect(self.select_input_file)
-        self.input_path_label = QLabel('No file selected')
+        # select path to input folder
+        self.input_path_btn = QPushButton('Select input folder')
+        self.input_path_btn.clicked.connect(self.select_input_folder)
+        self.input_path_label = QLabel('No folder selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)
 
@@ -1483,13 +1486,13 @@ class ChannelPlotWindow(QWidget):
         self.setLayout(layout)
 
     # specifies to load in the file(s) and folder
-    def select_input_file(self):
-        input_file, _ = QFileDialog.getOpenFileName(self, 'Select input file')
-        if input_file:
-            self.input_path_label.setText(input_file)
+    def select_input_folder(self):
+        input_folder = QFileDialog.getExistingDirectory(self, 'Select input folder')
+        if input_folder:
+            self.input_path_label.setText(input_folder)
 
     def select_output_folder(self):
-        output_folder, _ = QFileDialog.getExistingDirectory(self, 'Select output folder')
+        output_folder = QFileDialog.getExistingDirectory(self, 'Select output folder')
         if output_folder:
             self.output_path_label.setText(output_folder)
 
@@ -1519,11 +1522,11 @@ class ChannelPlotWindow(QWidget):
         patterns2have = self.patterns2have_line.text().split(',') if self.patterns2have_line.text() else None
 
         # convert strings to integers
-        well_idx = int(self.well_idx_line.text().split(','))
-        field_idx = int(self.field_idx_line.text().split(','))
-        percentiles = float(self.percentiles_line.text().split(',')) if self.percentiles_line.text() else None
+        well_idx = [int(x) for x in self.well_idx_line.text().split(',')]
+        field_idx = [int(x) for x in self.field_idx_line.text().split(',')]
+        percentiles = [float(x) for x in self.percentiles_line.text().split(',')] if self.percentiles_line.text() else None
         field_plot = int(self.field_plot_line.text()) if self.field_plot_line.text() else None
-        channels2use = int(self.channels2use_line.text().split(',')) if self.channels2use_line.text() else 0
+        channels2use = [int(x) for x in self.channels2use_line.text().split(',')] if self.channels2use_line.text() else 0
         
         try:
             if ref_wells is not None:
