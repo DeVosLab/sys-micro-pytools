@@ -8,8 +8,8 @@ import seaborn as sns
 from tqdm import tqdm
 
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
-    QSpinBox, QMessageBox, QComboBox)
+    QApplication, QWidget, QFormLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
+    QSpinBox, QMessageBox, QComboBox, QStackedWidget, QProgressBar)
 
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.df.plate_grid2table import plate_grid2table, plot_layout
@@ -19,6 +19,20 @@ from sys_micro_pytools.visualize import get_nice_ticks, create_palette
 from sys_micro_pytools.visualize.channel_plots import create_channel_plots
 from sys_micro_pytools.visualize.grid_plots import get_df_images, create_grid_plot
 from sys_micro_pytools.visualize.count_plots import create_count_df, create_count_plot
+
+# Selecting the path to a file
+def select_file(parent, label, dialog_title):
+    file_path, _ = QFileDialog.getOpenFileName(parent, dialog_title)
+    if file_path:
+        label.setText(file_path)
+    return file_path
+
+# Selecting the path to a folder
+def select_folder(parent, label, dialog_title):
+    folder_path = QFileDialog.getExistingDirectory(parent, dialog_title)
+    if folder_path:
+        label.setText(folder_path)
+    return folder_path
 
 """
 =============================================================
@@ -34,7 +48,7 @@ class MainMenu(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SysMicroPyTools GUI")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Select a tool:"))
 
         self.grid2table_btn = QPushButton("Grid2Table")
@@ -71,12 +85,13 @@ class Grid2TableWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Grid2Table")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Grid2Table Options"))
 
         # select path to input file
         self.input_path_btn = QPushButton('*Select input file')
-        self.input_path_btn.clicked.connect(self.select_input_file)
+        self.input_path_btn.clicked.connect(lambda: select_file(self, self.input_path_label,
+                                                                'Select input file'))
         self.input_path_label = QLabel('No file selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)
@@ -84,7 +99,8 @@ class Grid2TableWindow(QWidget):
         # select path to save the merged layout dataframe
         # if not specified, output will be saved in same directory as input file(s)
         self.output_path_btn = QPushButton('Select output folder')
-        self.output_path_btn.clicked.connect(self.select_output_folder)
+        self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
+                                                                   'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
         layout.addWidget(self.output_path_btn)
         layout.addWidget(self.output_path_label)
@@ -151,20 +167,9 @@ class Grid2TableWindow(QWidget):
         layout.addWidget(self.back_btn)
         self.setLayout(layout)
 
-    # specifies to load in a file
-    def select_input_file(self):
-        input_file, _ = QFileDialog.getOpenFileName(self, 'Select input file')
-        if input_file:
-            self.input_path_label.setText(input_file)
-
-    # specifies to load in a folder
-    def select_output_folder(self):
-        output_folder = QFileDialog.getExistingDirectory(self, 'Select output folder')
-        if output_folder:
-            self.output_path_label.setText(output_folder)
-
     # gathering all inputs for grid2table
     def run_plate_grid2table(self):
+        self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
         ncols = self.ncols_spin.value()
@@ -211,6 +216,9 @@ class Grid2TableWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
 
+        finally:
+            self.run_btn.setEnabled(True)
+
 """
 =============================================================
                 MEASURING DOSE RESPONSE TOOL
@@ -248,12 +256,13 @@ class MeasureDoseResponseWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Measure Dose Response")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Options to Measure Dose Response"))
 
         # select path to file containing dose response data
-        self.dose_response_file_btn = QPushButton('*Select file(s) containing dose response data')
-        self.dose_response_file_btn.clicked.connect(self.select_dose_response_file)
+        self.dose_response_file_btn = QPushButton('*Select file containing dose response data')
+        self.dose_response_file_btn.clicked.connect(lambda: select_file(self, self.dose_response_file_label,
+                                                                        'Select file containing dose response data'))
         self.dose_response_file_label = QLabel('No file selected')
         layout.addWidget(self.dose_response_file_btn)
         layout.addWidget(self.dose_response_file_label)
@@ -274,7 +283,8 @@ class MeasureDoseResponseWindow(QWidget):
 
         # select path to file containing calibration data
         self.calibration_data_file_btn = QPushButton('Select file containing calibration data (optional)')
-        self.calibration_data_file_btn.clicked.connect(self.select_calibration_data)
+        self.calibration_data_file_btn.clicked.connect(lambda: select_file(self, self.calibration_data_file_label,
+                                                                           'Select file containing calibration data (optional)'))
         self.calibration_data_file_label = QLabel('No file selected')
         layout.addWidget(self.calibration_data_file_btn)
         layout.addWidget(self.calibration_data_file_label)
@@ -373,21 +383,9 @@ class MeasureDoseResponseWindow(QWidget):
         self.dose_files = []
         self.cal_file = None
 
-    # specifies to load in the files
-    def select_dose_response_file(self):
-        dose_file, _ = QFileDialog.getOpenFileName(self, 'Select file(s) containing dose response data')
-        if dose_file:
-            self.dose_files = dose_file
-            self.dose_response_file_label.setText(', '.join([Path(f).name for f in dose_file]))
-
-    def select_calibration_data(self):
-        cal_file, _ = QFileDialog.getOpenFileName(self, 'Select file containing calibration data')
-        if cal_file:
-            self.cal_file = cal_file
-            self.calibration_data_file_label.setText(Path(cal_file).name)
-
     # gathering all inputs for measuring dose response
     def measure_dose_response(self):
+        self.run_btn.setEnabled(False)
 
         dose_file = self.dose_files
         dose_var = self.dose_var_line.text()
@@ -737,8 +735,12 @@ class MeasureDoseResponseWindow(QWidget):
                     print(f"{compound}: Could not calculate IC{ic_percentile} ({status})")
 
             QMessageBox.information(self, 'Success', 'Dose response analysis completed!')
+
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
+
+        finally:
+            self.run_btn.setEnabled(True)
 
 """
 =============================================================
@@ -754,7 +756,7 @@ class VisualiseWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Visualise Plots")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Select an operation:"))
 
         self.countplot_btn = QPushButton('Count Plot')
@@ -803,26 +805,29 @@ class CountPlotWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Count Plot")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Count Plot Options"))
 
         # select path to input file
         self.input_path_btn = QPushButton('*Select input file')
-        self.input_path_btn.clicked.connect(self.select_input_file)
+        self.input_path_btn.clicked.connect(lambda: select_file(self, self.input_path_label,
+                                                                'Select input file'))
         self.input_path_label = QLabel('No file selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)        
 
         # select path to output folder
         self.output_path_btn = QPushButton('*Select output folder')
-        self.output_path_btn.clicked.connect(self.select_output_folder)
+        self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
+                                                                   'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
         layout.addWidget(self.output_path_btn)
         layout.addWidget(self.output_path_label)
 
         # select path to file containing plate layout
         self.plate_layout_btn = QPushButton('*Select file containing plate layout')
-        self.plate_layout_btn.clicked.connect(self.select_layout_file)
+        self.plate_layout_btn.clicked.connect(lambda: select_file(self, self.plate_layout_label,
+                                                                  'Select file containing plate layout'))
         self.plate_layout_label = QLabel('No file selected')
         layout.addWidget(self.plate_layout_btn)
         layout.addWidget(self.plate_layout_label)
@@ -927,24 +932,9 @@ class CountPlotWindow(QWidget):
         layout.addWidget(self.back_btn)
         self.setLayout(layout)
 
-    # specifies to load in the files and folder
-    def select_input_file(self):
-        input_file, _ = QFileDialog.getOpenFileName(self, 'Select input file')
-        if input_file:
-            self.input_path_label.setText(input_file)
-
-    def select_output_folder(self):
-        output_folder, _ = QFileDialog.getExistingDirectory(self, 'Select output folder')
-        if output_folder:
-            self.output_path_label.setText(output_folder)
-
-    def select_layout_file(self):
-        layout_file, _ = QFileDialog.getOpenFileName(self, 'Select file containing plate layout')
-        if layout_file:
-            self.plate_layout_label.setText(layout_file)
-
     # gathering all inputs for visualising count plot
     def visualise_count_plot(self):
+        self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
         output_path = self.output_path_label.text()
@@ -1069,6 +1059,9 @@ class CountPlotWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
 
+        finally:
+            self.run_btn.setEnabled(True)
+
 """
 =============================================================
                          GRID PLOT
@@ -1103,26 +1096,29 @@ class GridPlotWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Grid Plot")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Grid Plot Options"))
 
         # select path to input folder
         self.input_path_btn = QPushButton('*Select input folder')
-        self.input_path_btn.clicked.connect(self.select_input_folder)
+        self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
+                                                                  'Select input folder'))
         self.input_path_label = QLabel('No folder selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)
 
         # select path to output folder
         self.output_path_btn = QPushButton('*Select output folder')
-        self.output_path_btn.clicked.connect(self.select_output_folder)
+        self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
+                                                                   'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
         layout.addWidget(self.output_path_btn)
         layout.addWidget(self.output_path_label)
 
         # select path to file containing plate layout
         self.plate_layout_btn = QPushButton('*Select file containing plate layout')
-        self.plate_layout_btn.clicked.connect(self.select_plate_layout)
+        self.plate_layout_btn.clicked.connect(lambda: select_file(self, self.plate_layout_label,
+                                                                  'Select file containing plate layout'))
         self.plate_layout_label = QLabel('No file selected')
         layout.addWidget(self.plate_layout_btn)
         layout.addWidget(self.plate_layout_label)
@@ -1169,7 +1165,8 @@ class GridPlotWindow(QWidget):
 
         # select path to file to image to use for flat field correction
         self.ff_path_btn = QPushButton('Select inmage file to use for flat field correction (optional)')
-        self.ff_path_btn.clicked.connect(self.select_ff_image)
+        self.ff_path_btn.clicked.connect(lambda: select_file(self, self.ff_path_label,
+                                                             'Select image file to use for flat field correction (optional)'))
         self.ff_path_label = QLabel('No image selected')
         layout.addWidget(self.ff_path_btn)
         layout.addWidget(self.ff_path_label)
@@ -1220,29 +1217,9 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.back_btn)
         self.setLayout(layout)
 
-    # specifies to load in the files and folder
-    def select_input_folder(self):
-        input_folder = QFileDialog.getExistingDirectory(self, 'Select input folder')
-        if input_folder:
-            self.input_path_label.setText(input_folder)
-
-    def select_output_folder(self):
-        output_folder = QFileDialog.getExistingDirectory(self, 'Select output folder')
-        if output_folder:
-            self.output_path_label.setText(output_folder)
-
-    def select_plate_layout(self):
-        plate_layout, _ = QFileDialog.getOpenFileName(self, 'Select file containing plate layout')
-        if plate_layout:
-            self.plate_layout_label.setText(plate_layout)
-
-    def select_ff_image(self):
-        ff_image, _ = QFileDialog.getOpenFileName(self, 'Select image file for flat field correction')
-        if ff_image:
-            self.ff_path_label.setText(ff_image)
-
     # gathering all inputs for visualising grid plot
     def visualise_grid_plot(self):
+        self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
         output_path = self.output_path_label.text()
@@ -1370,6 +1347,9 @@ class GridPlotWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
 
+        finally:
+            self.run_btn.setEnabled(True)
+
 """
 =============================================================
                         CHANNEL PLOT
@@ -1399,19 +1379,21 @@ class ChannelPlotWindow(QWidget):
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Channel Plot")
-        layout = QVBoxLayout()
+        layout = QFormLayout()
         layout.addWidget(QLabel("Channel Plot Options"))
 
         # select path to input folder
         self.input_path_btn = QPushButton('*Select input folder')
-        self.input_path_btn.clicked.connect(self.select_input_folder)
+        self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
+                                                                  'Select input folder'))
         self.input_path_label = QLabel('No folder selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)
 
         # select path to output folder
         self.output_path_btn = QPushButton('*Select output folder')
-        self.output_path_btn.clicked.connect(self.select_output_folder)
+        self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
+                                                                   'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
         layout.addWidget(self.output_path_btn)
         layout.addWidget(self.output_path_label)
@@ -1453,7 +1435,8 @@ class ChannelPlotWindow(QWidget):
 
         # select path to image to use for flat field correction
         self.select_img_btn = QPushButton('Select image file for flat field correction (optional)')
-        self.select_img_btn.clicked.connect(self.select_img_file)
+        self.select_img_btn.clicked.connect(lambda: select_file(self, self.select_img_label,
+                                                                'Select image file for flat field correction (optional)'))
         self.select_img_label = QLabel('No image selected')
         layout.addWidget(self.select_img_btn)
         layout.addWidget(self.select_img_label)
@@ -1495,24 +1478,9 @@ class ChannelPlotWindow(QWidget):
         layout.addWidget(self.back_btn)
         self.setLayout(layout)
 
-    # specifies to load in the file(s) and folder
-    def select_input_folder(self):
-        input_folder = QFileDialog.getExistingDirectory(self, 'Select input folder')
-        if input_folder:
-            self.input_path_label.setText(input_folder)
-
-    def select_output_folder(self):
-        output_folder = QFileDialog.getExistingDirectory(self, 'Select output folder')
-        if output_folder:
-            self.output_path_label.setText(output_folder)
-
-    def select_img_file(self):
-        image_file, _ = QFileDialog.getOpenFileName(self, 'Select image file')
-        if image_file:
-            self.select_img_label.setText(image_file)
-
     # gathering all inputs for visualising channel plot
     def visualise_channel_plot(self):
+        self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
         output_path = self.output_path_label.text()
@@ -1581,10 +1549,14 @@ class ChannelPlotWindow(QWidget):
         except Exception as e:
             QMessageBox.critical(self, 'Error', str(e))
 
+        finally:
+            self.run_btn.setEnabled(True)
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SysMicroPyTools GUI")
+        self.stacked = QStackedWidget()
         self.menu = MainMenu()
 
         self.grid2table_window = Grid2TableWindow(self.show_menu)
@@ -1601,7 +1573,7 @@ class MainWindow(QWidget):
         self.visualise_window.gridplot_btn.clicked.connect(self.show_grid)
         self.visualise_window.channelplot_btn.clicked.connect(self.show_channel)
 
-        self.layout = QVBoxLayout()
+        self.layout = QFormLayout()
         self.layout.addWidget(self.menu)
         self.layout.addWidget(self.grid2table_window)
         self.layout.addWidget(self.measuredoseresponse_window)
