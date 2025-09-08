@@ -6,10 +6,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
+import traceback
 
 from PySide6.QtWidgets import (
     QApplication, QWidget, QFormLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
-    QSpinBox, QMessageBox, QComboBox, QStackedWidget, QProgressBar)
+    QSpinBox, QMessageBox, QComboBox, QStackedWidget)
 
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.df.plate_grid2table import plate_grid2table, plot_layout
@@ -214,6 +215,7 @@ class Grid2TableWindow(QWidget):
             QMessageBox.information(self, 'Success', 'Operation completed successfully!')
 
         except Exception as e:
+            traceback.print_exc()
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
@@ -737,6 +739,7 @@ class MeasureDoseResponseWindow(QWidget):
             QMessageBox.information(self, 'Success', 'Dose response analysis completed!')
 
         except Exception as e:
+            traceback.print_exc()
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
@@ -838,14 +841,14 @@ class CountPlotWindow(QWidget):
         layout.addWidget(self.suffix_line)
 
         # start and stop indices of well name in filename
-        self.well_idx_line = QLineEdit('4,7')
+        self.filename_well_line = QLineEdit('4,7')
         layout.addWidget(QLabel('*Indices of well name in filename (start,stop):'))
-        layout.addWidget(self.well_idx_line)
+        layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field number in filename
-        self.field_idx_line = QLineEdit('17,21')
+        self.filename_field_line = QLineEdit('17,21')
         layout.addWidget(QLabel('*Indices of field number in filename (start,stop):'))
-        layout.addWidget(self.field_idx_line)
+        layout.addWidget(self.filename_field_line)
 
         # list of wells to skip
         self.skip_wells_line = QLineEdit()
@@ -962,8 +965,8 @@ class CountPlotWindow(QWidget):
         # convert strings to integers
         box_width = float(self.box_width_line.text())
         dpi = int(self.dpi_line.text())
-        well_idx = int(self.well_idx_line.text().split(','))
-        field_idx = int(self.field_idx_line.text().split(','))
+        filename_well = int(self.filename_well_line.text().split(','))
+        filename_field = int(self.filename_field_line.text().split(','))
         y_lim = float(self.y_lim_line.text().split(',')) if self.y_lim_line.text() else None
 
         try:                
@@ -1002,8 +1005,8 @@ class CountPlotWindow(QWidget):
                 input_path,
                 check_batches,
                 suffix,
-                well_idx,
-                field_idx,
+                filename_well,
+                filename_field,
                 skip_wells,
                 plate_id,
                 rep_id
@@ -1057,6 +1060,7 @@ class CountPlotWindow(QWidget):
             QMessageBox.information(self, 'Success', 'Operation completed successfully!')
         
         except Exception as e:
+            traceback.print_exc()
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
@@ -1129,14 +1133,14 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.suffix_line)
 
         # start and stop indices of well name in the filename
-        self.well_idx_line = QLineEdit('4,7')
+        self.filename_well_line = QLineEdit('4,7')
         layout.addWidget(QLabel('*Indices of well name in filename (start,stop):'))
-        layout.addWidget(self.well_idx_line)
+        layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field number in the filename
-        self.field_idx_line = QLineEdit('17,21')
+        self.filename_field_line = QLineEdit('17,21')
         layout.addWidget(QLabel('*Indices of field number in filename (start,stop):'))
-        layout.addWidget(self.field_idx_line)
+        layout.addWidget(self.filename_field_line)
 
         # list of wells to skip
         self.skip_wells_line = QLineEdit()
@@ -1164,7 +1168,7 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.masks_cb)
 
         # select path to file to image to use for flat field correction
-        self.ff_path_btn = QPushButton('Select inmage file to use for flat field correction (optional)')
+        self.ff_path_btn = QPushButton('Select image file to use for flat field correction (optional)')
         self.ff_path_btn.clicked.connect(lambda: select_file(self, self.ff_path_label,
                                                              'Select image file to use for flat field correction (optional)'))
         self.ff_path_label = QLabel('No image selected')
@@ -1191,9 +1195,9 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.check_batches_cb)
 
         # index of field to plot for each well. if none, random field will be selected
-        self.field_plot_line = QLineEdit()
+        self.field_idx_line = QLineEdit()
         layout.addWidget(QLabel('Index of field to plot (optional):'))
-        layout.addWidget(self.field_plot_line)
+        layout.addWidget(self.field_idx_line)
 
         # plate ID to use; overwrites plate_layout automatically
         self.plate_id_line = QLineEdit()
@@ -1239,15 +1243,15 @@ class GridPlotWindow(QWidget):
         rep_id = self.rep_id_line.text() if self.rep_id_line.text() else None
 
         # only split at ',' if text exists
-        skip_wells = self.skip_wells_line.text().split(',') if self.skip_wells_line.text() else None
+        skip_wells = self.skip_wells_line.text().split(',') if self.skip_wells_line.text() else []
         ref_wells = self.ref_wells_line.text().split(',') if self.ref_wells_line.text() else None
         conditions2remove = self.conditions2remove_line.text().split(',') if self.conditions2remove_line.text() else None
 
         # convert strings to integers
-        well_idx = [int(x) for x in self.well_idx_line.text().split(',')]
-        field_idx = [int(x) for x in self.field_idx_line.text().split(',')]
+        filename_well = [int(x) for x in self.filename_well_line.text().split(',')]
+        filename_field = [int(x) for x in self.filename_field_line.text().split(',')]
         channels2use = [int(x) for x in self.channels2use_line.text().split(',')] if self.channels2use_line.text() else 0
-        field_plot = [int(x) for x in self.field_plot_line.text()] if self.field_plot_line.text() else None
+        field_idx = [int(x) for x in self.field_idx_line.text()] if self.field_idx_line.text() else []
 
         try:
             input_path = Path(input_path)
@@ -1255,7 +1259,7 @@ class GridPlotWindow(QWidget):
             output_path.mkdir(parents=True, exist_ok=True)
 
             if isinstance(skip_wells, str):
-                skip_wells = [skip_wells]
+                    skip_wells = [skip_wells]
 
             if isinstance(condition_vars, str):
                 condition_vars = [condition_vars]
@@ -1263,10 +1267,10 @@ class GridPlotWindow(QWidget):
             if conditions2remove is not None:
                 conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
 
-            if isinstance(field_plot, int):
-                field_plot = [field_plot]
-            for idx in field_plot:
-                assert idx >= 0, 'field_plot must be a positive integer'
+            if isinstance(field_idx, int):
+                field_idx = [field_idx]
+            for idx in field_idx:
+                assert idx >= 0, 'field_idx must be a positive integer'
 
             # Set color palette for treatments
             plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python'); 
@@ -1296,8 +1300,8 @@ class GridPlotWindow(QWidget):
                 input_path,
                 check_batches,
                 suffix,
-                well_idx,
-                field_idx,
+                filename_well,
+                filename_field,
                 skip_wells,
                 plate_id,
                 rep_id
@@ -1345,6 +1349,7 @@ class GridPlotWindow(QWidget):
             QMessageBox.information(self, 'Success', 'Operation completed successfully!')
 
         except Exception as e:
+            traceback.print_exc()
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
@@ -1424,14 +1429,14 @@ class ChannelPlotWindow(QWidget):
         layout.addWidget(self.ref_wells_line)
 
         # start and stop indices of well name in filename
-        self.well_idx_line = QLineEdit('4,7')
+        self.filename_well_line = QLineEdit('4,7')
         layout.addWidget(QLabel('*Indices of the well name in the filename (start,stop):'))
-        layout.addWidget(self.well_idx_line)
+        layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field numbers in filename
-        self.field_idx_line = QLineEdit('17,21')
+        self.filename_field_line = QLineEdit('17,21')
         layout.addWidget(QLabel('*Indices of field numbers in filename (start,stop):'))
-        layout.addWidget(self.field_idx_line)
+        layout.addWidget(self.filename_field_line)
 
         # select path to image to use for flat field correction
         self.select_img_btn = QPushButton('Select image file for flat field correction (optional)')
@@ -1457,9 +1462,9 @@ class ChannelPlotWindow(QWidget):
         layout.addWidget(self.patterns2have_line)
 
         # index of field to plot
-        self.field_plot_line = QLineEdit()
+        self.field_idx_line = QLineEdit()
         layout.addWidget(QLabel('Index of field to plot (optional):'))
-        layout.addWidget(self.field_plot_line)
+        layout.addWidget(self.field_idx_line)
 
         # type of output to save
         self.output_type_line = QLineEdit('channels,composite')
@@ -1500,10 +1505,10 @@ class ChannelPlotWindow(QWidget):
         patterns2have = self.patterns2have_line.text().split(',') if self.patterns2have_line.text() else None
 
         # convert strings to integers
-        well_idx = [int(x) for x in self.well_idx_line.text().split(',')]
-        field_idx = [int(x) for x in self.field_idx_line.text().split(',')]
+        filename_well = [int(x) for x in self.filename_well_line.text().split(',')]
+        filename_field = [int(x) for x in self.filename_field_line.text().split(',')]
         percentiles = [float(x) for x in self.percentiles_line.text().split(',')] if self.percentiles_line.text() else None
-        field_plot = int(self.field_plot_line.text()) if self.field_plot_line.text() else None
+        field_idx = int(self.field_idx_line.text()) if self.field_idx_line.text() else None
         channels2use = [int(x) for x in self.channels2use_line.text().split(',')] if self.channels2use_line.text() else 0
         
         try:
@@ -1534,19 +1539,20 @@ class ChannelPlotWindow(QWidget):
                 suffix=suffix,
                 normalize=normalise,
                 ref_wells=ref_wells,
-                filename_well_idx=well_idx,
-                filename_field_idx=field_idx,
+                filename_well_idx=filename_well,
+                filename_field_idx=filename_field,
                 flat_field_path=ff_path,
                 percentiles=percentiles,
                 pattern2ignore=patterns2ignore,
                 patterns2have=patterns2have,
-                field_idx=field_plot,
+                field_idx=field_idx,
                 output_type=output_type
             )
 
             QMessageBox.information(self, 'Success', 'Operation completed successfully!')
 
         except Exception as e:
+            traceback.print_exc()
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
