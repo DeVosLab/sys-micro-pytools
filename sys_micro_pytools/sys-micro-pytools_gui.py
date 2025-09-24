@@ -1,16 +1,16 @@
 import sys
-from pathlib import Path
 import tifffile
-import pandas as pd
+import traceback
 import numpy as np
-import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
-import traceback
+from pathlib import Path
+import matplotlib.pyplot as plt
 
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QFormLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
-    QSpinBox, QMessageBox, QComboBox, QStackedWidget)
+    QApplication, QWidget, QVBoxLayout, QPushButton, QLabel, QLineEdit, QFileDialog, QCheckBox,
+    QSpinBox, QMessageBox, QComboBox, QStackedWidget, QScrollArea)
 
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.df.plate_grid2table import plate_grid2table, plot_layout
@@ -35,21 +35,12 @@ def select_folder(parent, label, dialog_title):
         label.setText(folder_path)
     return folder_path
 
-"""
-=============================================================
-                      MAIN / HOME PAGE
-=============================================================
-three buttons that will redirect the user to different tools:
-1)  Grid2Table
-2)  Measure Dose Response
-3)  Visualise Plots
-=============================================================
-"""
 class MainMenu(QWidget):
+    """ Main/Home page: Three buttons that will redirect the user to different tools."""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SysMicroPyTools GUI")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Select a tool:"))
 
         self.grid2table_btn = QPushButton("Grid2Table")
@@ -62,31 +53,12 @@ class MainMenu(QWidget):
 
         self.setLayout(layout)
 
-"""
-=============================================================
-                      GRID 2 TABLE TOOL
-=============================================================
-several parameters/options to customise programme settings:
-- select input file
-- select output folder
-* filename of output file
-* visualise plate layout
-* index of plate to be visualised
-- row names
-- column names
-* order of variables in visualisation
-- number of columns for subplots in visualisation
-* add annotations to heatmap
-* treat variables as numeric in visualisation
-* remove rows containing NA values from dataframe
-                                                    optional*
-=============================================================
-"""
 class Grid2TableWindow(QWidget):
+    """Grid2Table tool: Several parameters/options that the user can customise."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Grid2Table")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Grid2Table Options"))
 
         # select path to input file
@@ -163,13 +135,17 @@ class Grid2TableWindow(QWidget):
         self.run_btn.clicked.connect(self.run_plate_grid2table)
         layout.addWidget(self.run_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+        
         self.setLayout(layout)
 
     # gathering all inputs for grid2table
     def run_plate_grid2table(self):
+
+        # disable run button immediately to prevent running two processes simultaneously
         self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
@@ -219,53 +195,21 @@ class Grid2TableWindow(QWidget):
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
+            # re-enable run button
             self.run_btn.setEnabled(True)
 
-"""
-=============================================================
-                MEASURING DOSE RESPONSE TOOL
-=============================================================
-several parameters/options to customise programme settings:
-- select dose response data file
-* convert dose response data from grid to table format
-* variable to add to the dose response data
-* value of variable to be added ^ added as new column
-* select file containing calibration data
-- percentile of inhibition to calculate
-- min. % change required to consider valid dose response
-- variables to group by
-- variables of which unique combinations form a condition
-- control condition values
-* variable where the value is same for subgroup of controls
-  and a condition
-- dose variable name
-- response variable name
-* normalise response variable
-* variable to infer from response variable using calibration
-  curve
-* log scale for x-axis
-* log scale for y-axis
-- calculate IC value relative to control, or within range of
-  response variable for each treatment
-- unit of the x-axis
-* unit of the y-axis
-- row variable name for plotting layouts
-- volumn variable name for plotting layouts
-                                                    optional*
-=============================================================
-"""
 class MeasureDoseResponseWindow(QWidget):
+    """Dose Response measurement tool: Several parameters/options that the user can customise."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Measure Dose Response")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Options to Measure Dose Response"))
 
         # select path to file containing dose response data
         self.dose_response_file_btn = QPushButton('*Select file containing dose response data')
-        self.dose_response_file_btn.clicked.connect(lambda: select_file(self, self.dose_response_file_label,
-                                                                        'Select file containing dose response data'))
         self.dose_response_file_label = QLabel('No file selected')
+        self.dose_response_file_btn.clicked.connect(self.select_input_folder)
         layout.addWidget(self.dose_response_file_btn)
         layout.addWidget(self.dose_response_file_label)
 
@@ -377,19 +321,30 @@ class MeasureDoseResponseWindow(QWidget):
         self.run_btn.clicked.connect(self.measure_dose_response)
         layout.addWidget(self.run_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+
         self.setLayout(layout)
 
         self.dose_files = []
         self.cal_file = None
 
+    # Select dose response data
+    def select_input_folder(self):
+        folder_path = QFileDialog.getExistingDirectory(self, 'Select folder containing dose response data')
+        if folder_path:
+            self.dose_response_file_label.setText(folder_path)
+            self.dose_folder = folder_path
+
     # gathering all inputs for measuring dose response
     def measure_dose_response(self):
+
+        # disable run button immediately to prevent running two processes simultaneously
         self.run_btn.setEnabled(False)
 
-        dose_file = self.dose_files
+        dose_files = self.dose_folder
         dose_var = self.dose_var_line.text()
         response_var = self.response_var_line.text()
         x_unit = self.x_unit_line.text()
@@ -415,15 +370,16 @@ class MeasureDoseResponseWindow(QWidget):
 
         # optional variables, only split at ',' if text exists
         groupby_vars = self.groupby_vars_line.text().split(',') if self.groupby_vars_line.text() else None
-        condition_vars = self.condition_vars_line.text().split(',') if self.condition_vars_line.text() else None
-        control_val = self.control_val_line.text().split(',') if self.control_val_line.text() else None
+        condition_vars = self.condition_vars_line.text().split(',') if self.condition_vars_line.text() else []
+        control_val = self.control_val_line.text().split(',') if self.control_val_line.text() else []
 
         try:             
             # get dose-response data
-            dose_files = [Path(file) for file in dose_file]
+            folder = Path(self.dose_folder)
+            dose_files = sorted(folder.glob('*.csv'))
             dfs_dose = []
-            for i, dose_file in enumerate(dose_files):
-                df_dose = pd.read_csv(dose_file, header=0, index_col=False)
+            for i, dosefile in enumerate(dose_files):
+                df_dose = pd.read_csv(dosefile, header=0, index_col=False)
                 if grid2table:
                     df_dose = plate_grid2table(df_dose)
                 if var2add is not None and var2add_val is not None:
@@ -454,11 +410,14 @@ class MeasureDoseResponseWindow(QWidget):
             df_dose[response_var] = df_dose[response_var].astype(float)
 
             # Get the controls
-            control_query = ' and '.join(
-                    f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
-                    for var, value in zip(condition_vars, control_val)
-                )
-            df_control = df_dose.query(control_query)
+            if condition_vars or control_val:
+                control_query = ' and '.join(
+                        f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
+                        for var, value in zip(condition_vars, control_val)
+                    )
+                df_control = df_dose.query(control_query)
+            else:
+                df_control = df_dose.copy()
             
             # Normalize response for each group to the control response
             if normalise:
@@ -479,7 +438,8 @@ class MeasureDoseResponseWindow(QWidget):
                     df_dose.loc[group_idx, response_var_norm] = df_dose.loc[group_idx, response_var] / df_control_group[response_var].mean()
             
             # Get DMSO controls after normalization
-            df_control = df_dose.query(control_query)
+            if condition_vars or control_val:
+                df_control = df_dose.query(control_query)
 
             # Get calibration data
             if inferred_var is not None and cal_file is not None:
@@ -743,23 +703,15 @@ class MeasureDoseResponseWindow(QWidget):
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
+            # re-enable run button
             self.run_btn.setEnabled(True)
 
-"""
-=============================================================
-                    VISUALISE PLOTS TOOL
-=============================================================
-three selections to visualise plots:
-1)  count plot
-2)  grid plot
-3)  channel plot
-=============================================================
-"""
 class VisualiseWindow(QWidget):
+    """Plot Visualisation menu: Three selections to use to visualise different kinds of plots."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Visualise Plots")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Select an operation:"))
 
         self.countplot_btn = QPushButton('Count Plot')
@@ -770,51 +722,25 @@ class VisualiseWindow(QWidget):
         layout.addWidget(self.gridplot_btn)
         layout.addWidget(self.channelplot_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+
         self.setLayout(layout)
 
-"""
-=============================================================
-                        COUNT PLOT
-=============================================================
-several parameters/options to customise programme settings:
-- select input file
-- select output folder
-- select file containing plate layout
-- suffix of image files
-- start and stop indices of well name in filename
-- start and stop indices of field number in filename
-* list of wells to skip
-- colour map to use for boxplots
-- variables to use for colour encoding
-* list of condition combinations to remove from the palette
-* check if input path contains subdirectories
-- label for y-axis
-* limits for y-axis
-- width of boxes in the boxplot
-* add jitter to the points
-- type of plot to create
-- format for output figures
-- DPI for output figures
-* save counts to CSV file
-* plate ID to use; overwrites plate_layout automatically
-* rep ID to use; overwrites plate_layout automatically
-                                                    optional*
-=============================================================
-"""
 class CountPlotWindow(QWidget):
+    """Count Plot operation: Several parameters/options for the user to customise."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Count Plot")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Count Plot Options"))
 
         # select path to input file
-        self.input_path_btn = QPushButton('*Select input file')
-        self.input_path_btn.clicked.connect(lambda: select_file(self, self.input_path_label,
-                                                                'Select input file'))
+        self.input_path_btn = QPushButton('*Select input folder')
+        self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
+                                                                'Select input folder'))
         self.input_path_label = QLabel('No file selected')
         layout.addWidget(self.input_path_btn)
         layout.addWidget(self.input_path_label)        
@@ -930,13 +856,17 @@ class CountPlotWindow(QWidget):
         self.run_btn.clicked.connect(self.visualise_count_plot)
         layout.addWidget(self.run_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+
         self.setLayout(layout)
 
     # gathering all inputs for visualising count plot
     def visualise_count_plot(self):
+
+        # disable run button immediately to prevent running two processes simultaneously
         self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
@@ -955,18 +885,18 @@ class CountPlotWindow(QWidget):
         condition_vars = self.condition_vars_line.text().split(',')
 
         # optional variables
-        plate_id = self.plate_id_line.text() if self.plate_id.text() else None
-        rep_id = self.rep_id_line.text() if self.rep_id.text() else None
+        plate_id = self.plate_id_line.text() if self.plate_id_line.text() else None
+        rep_id = self.rep_id_line.text() if self.rep_id_line.text() else None
 
         # only split at ',' if text exists
-        skip_wells = self.skip_wells_line.text().split(',') if self.skip_wells_line.text() else None
+        skip_wells = self.skip_wells_line.text().split(',') if self.skip_wells_line.text() else []
         conditions2remove = self.conditions2remove_line.text().split(',') if self.conditions2remove_line.text() else None
 
         # convert strings to integers
         box_width = float(self.box_width_line.text())
         dpi = int(self.dpi_line.text())
-        filename_well = int(self.filename_well_line.text().split(','))
-        filename_field = int(self.filename_field_line.text().split(','))
+        filename_well = [int(x) for x in self.filename_well_line.text().split(',')]
+        filename_field = [int(x) for x in self.filename_field_line.text().split(',')]
         y_lim = float(self.y_lim_line.text().split(',')) if self.y_lim_line.text() else None
 
         try:                
@@ -1064,43 +994,15 @@ class CountPlotWindow(QWidget):
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
+            # re-enable run button
             self.run_btn.setEnabled(True)
 
-"""
-=============================================================
-                         GRID PLOT
-=============================================================
-several parameters/options to customise programme settings:
-- select input file
-- select output folder
-- select file containing plate layout
-- suffix of image files
-- start and stop indices of well name in the filename
-- start and stop indices of field number in the filename
-* list of wells to skip
-- type of image to plot
-- channels to use for making the plots
-* well(s) to use as reference for normalisation using its
-  percentiles
-* indicate that image is a mask. flat field correction will
-  not be applied
-* select file to image to use for flat field correction
-- colour map to apply to image borders in grid plot
-- variables to use for colour encoding
-* list of condition combinations to remove from the palette
-* check if input path contains subdirectories
-* index of field to plot for each well. if none, random field
-  will be selected
-* plate ID to use; overwrites plate_layout automatically
-* rep ID to use; overwrites plate_layout automatically
-                                                    optional*
-=============================================================
-"""
 class GridPlotWindow(QWidget):
+    """Grid Plot operation: Several parameters/options for the user to customise."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Grid Plot")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Grid Plot Options"))
 
         # select path to input folder
@@ -1149,7 +1051,7 @@ class GridPlotWindow(QWidget):
 
         # type of image to plot
         self.img_type_combo = QComboBox()
-        self.img_type_combo.addItems(['grayscale', 'multichannel', 'mask'])
+        self.img_type_combo.addItems(['grayscale', 'multi_channel', 'mask'])
         layout.addWidget(QLabel('Type of image to plot'))
         layout.addWidget(self.img_type_combo)
 
@@ -1216,13 +1118,17 @@ class GridPlotWindow(QWidget):
         self.run_btn.clicked.connect(self.visualise_grid_plot)
         layout.addWidget(self.run_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+
         self.setLayout(layout)
 
     # gathering all inputs for visualising grid plot
     def visualise_grid_plot(self):
+
+        # disable run button immediately to prevent running two processes simultaneously
         self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
@@ -1353,38 +1259,16 @@ class GridPlotWindow(QWidget):
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
+            # re-enable run button
             self.run_btn.setEnabled(True)
 
-"""
-=============================================================
-                        CHANNEL PLOT
-=============================================================
-several parameters/options to customise programme settings:
-- select input file
-- select output folder
-- type of image to plot
-- channels to use for making the plots
-- suffix of image files
-* normalise the images
-* well(s) to use as reference for normalisation using its
-  percentiles
-- start and stop indices of well name in filename
-- start and stop indices of field numbers in filename
-* select image to use for flat field correction
-- percentiles to use for image normalisation
-* patterns in filename to ignore
-* patterns in filename to include
-* index of field to plot
-- type of output to save
-                                                    optional*
-=============================================================
-"""
     
 class ChannelPlotWindow(QWidget):
+    """Channel Plot operation: Several parameters/options for the user to customise."""
     def __init__(self, back_callback):
         super().__init__()
         self.setWindowTitle("Channel Plot")
-        layout = QFormLayout()
+        layout = QVBoxLayout()
         layout.addWidget(QLabel("Channel Plot Options"))
 
         # select path to input folder
@@ -1478,13 +1362,17 @@ class ChannelPlotWindow(QWidget):
         self.run_btn.clicked.connect(self.visualise_channel_plot)
         layout.addWidget(self.run_btn)
 
+        # back button to return to the previous page
         self.back_btn = QPushButton("Back")
         self.back_btn.clicked.connect(back_callback)
         layout.addWidget(self.back_btn)
+
         self.setLayout(layout)
 
     # gathering all inputs for visualising channel plot
     def visualise_channel_plot(self):
+
+        # disable run button immediately to prevent running two processes simultaneously
         self.run_btn.setEnabled(False)
 
         input_path = self.input_path_label.text()
@@ -1556,6 +1444,7 @@ class ChannelPlotWindow(QWidget):
             QMessageBox.critical(self, 'Error', str(e))
 
         finally:
+            # re-enable run button
             self.run_btn.setEnabled(True)
 
 class MainWindow(QWidget):
@@ -1565,13 +1454,26 @@ class MainWindow(QWidget):
         self.stacked = QStackedWidget()
         self.menu = MainMenu()
 
+        # Defining windows
         self.grid2table_window = Grid2TableWindow(self.show_menu)
-        self.measuredoseresponse_window = MeasureDoseResponseWindow(self.show_menu)
+
+        self.doseresponse_noscroll = MeasureDoseResponseWindow(self.show_menu)
+        self.doseresponse_window = QScrollArea()
+        self.doseresponse_window.setWidgetResizable(True)
+        self.doseresponse_window.setWidget(self.doseresponse_noscroll)
+
         self.visualise_window = VisualiseWindow(self.show_menu)
-        self.count_window = CountPlotWindow(self.show_visualise)
+
+        self.count_noscroll = CountPlotWindow(self.show_visualise)
+        self.count_window = QScrollArea()
+        self.count_window.setWidgetResizable(True)
+        self.count_window.setWidget(self.count_noscroll)
+
+
         self.grid_window = GridPlotWindow(self.show_visualise)
         self.channel_window = ChannelPlotWindow(self.show_visualise)
 
+        # Defining navigation routes
         self.menu.grid2table_btn.clicked.connect(self.show_grid2table)
         self.menu.measure_dose_response_btn.clicked.connect(self.show_measure_dose_response)
         self.menu.visualise_btn.clicked.connect(self.show_visualise)
@@ -1579,10 +1481,11 @@ class MainWindow(QWidget):
         self.visualise_window.gridplot_btn.clicked.connect(self.show_grid)
         self.visualise_window.channelplot_btn.clicked.connect(self.show_channel)
 
-        self.layout = QFormLayout()
+        # Adding windows
+        self.layout = QVBoxLayout()
         self.layout.addWidget(self.menu)
         self.layout.addWidget(self.grid2table_window)
-        self.layout.addWidget(self.measuredoseresponse_window)
+        self.layout.addWidget(self.doseresponse_window)
         self.layout.addWidget(self.visualise_window)
         self.layout.addWidget(self.count_window)
         self.layout.addWidget(self.grid_window)
@@ -1591,22 +1494,27 @@ class MainWindow(QWidget):
 
         self.show_menu()
 
+    ## Defining functions to show menus
+
     def show_menu(self):
         self.menu.show()
         self.grid2table_window.hide()
-        self.measuredoseresponse_window.hide()
+        self.doseresponse_window.hide()
         self.visualise_window.hide()
         self.count_window.hide()
         self.grid_window.hide()
         self.channel_window.hide()
+        self.adjustSize()
 
     def show_grid2table(self):
         self.menu.hide()
         self.grid2table_window.show()
+        self.adjustSize()
 
     def show_measure_dose_response(self):
         self.menu.hide()
-        self.measuredoseresponse_window.show()
+        self.doseresponse_window.show()
+        self.adjustSize()
 
     def show_visualise(self):
         self.menu.hide()
@@ -1614,21 +1522,25 @@ class MainWindow(QWidget):
         self.count_window.hide()
         self.grid_window.hide()
         self.channel_window.hide()
+        self.adjustSize()
 
     def show_count(self):
         self.menu.hide()
         self.visualise_window.hide()
         self.count_window.show()
+        self.adjustSize()
 
     def show_grid(self):
         self.menu.hide()
         self.visualise_window.hide()
         self.grid_window.show()
+        self.adjustSize()
 
     def show_channel(self):
         self.menu.hide()
         self.visualise_window.hide()
         self.channel_window.show()
+        self.adjustSize()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
