@@ -250,12 +250,12 @@ class MeasureDoseResponseWindow(QWidget):
 
         # variables of which unique combinations form a condition
         self.condition_vars_line = QLineEdit()
-        layout.addWidget(QLabel('Variables of which unique combinations form a condition (comma-separated, optional):'))
+        layout.addWidget(QLabel('Variables of which unique combinations form a condition (comma-separated):'))
         layout.addWidget(self.condition_vars_line)
 
         # control condition values
         self.control_val_line = QLineEdit()
-        layout.addWidget(QLabel('Values of condition variables of the control condition (comma-separated, optional):'))
+        layout.addWidget(QLabel('Values of condition variables of the control condition (comma-separated):'))
         layout.addWidget(self.control_val_line)
 
         # variable where the value is same for subgroup of controls and a condition
@@ -367,7 +367,7 @@ class MeasureDoseResponseWindow(QWidget):
         # optional variables, only split at ',' if text exists
         groupby_vars = self.groupby_vars_line.text().split(',') if self.groupby_vars_line.text() else None
         condition_vars = self.condition_vars_line.text().split(',') if self.condition_vars_line.text() else []
-        control_val = self.control_val_line.text().split(',') if self.control_val_line.text() else []
+        control_val = self.control_val_line.text().split(',') if self.control_val_line.text() else None
 
         try:             
             # get dose-response data
@@ -406,14 +406,11 @@ class MeasureDoseResponseWindow(QWidget):
             df_dose[response_var] = df_dose[response_var].astype(float)
 
             # Get the controls
-            if condition_vars or control_val:
-                control_query = ' and '.join(
-                        f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
-                        for var, value in zip(condition_vars, control_val)
-                    )
-                df_control = df_dose.query(control_query)
-            else:
-                df_control = df_dose.copy()
+            control_query = ' and '.join(
+                    f'{var} == "{value}"' if isinstance(value, str) else f'{var} == {value}'
+                    for var, value in zip(condition_vars, control_val)
+                )
+            df_control = df_dose.query(control_query)
             
             # Normalize response for each group to the control response
             if normalise:
@@ -434,8 +431,7 @@ class MeasureDoseResponseWindow(QWidget):
                     df_dose.loc[group_idx, response_var_norm] = df_dose.loc[group_idx, response_var] / df_control_group[response_var].mean()
             
             # Get DMSO controls after normalization
-            if condition_vars or control_val:
-                df_control = df_dose.query(control_query)
+            df_control = df_dose.query(control_query)
 
             # Get calibration data
             if inferred_var is not None and cal_file is not None:
