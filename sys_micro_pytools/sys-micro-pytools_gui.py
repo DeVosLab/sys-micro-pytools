@@ -62,7 +62,7 @@ class Grid2TableWindow(QWidget):
         layout.addWidget(QLabel("Grid2Table Options"))
 
         # select path to input file
-        self.input_path_btn = QPushButton('*Select input file')
+        self.input_path_btn = QPushButton('Select input file')
         self.input_path_btn.clicked.connect(lambda: select_file(self, self.input_path_label,
                                                                 'Select input file'))
         self.input_path_label = QLabel('No file selected')
@@ -95,12 +95,12 @@ class Grid2TableWindow(QWidget):
 
         # categories for row variable, i.e. row names
         self.row_categories_line = QLineEdit('A,B,C,D,E,F,G,H')
-        layout.addWidget(QLabel('*Row categories (comma-separated):'))
+        layout.addWidget(QLabel('Row categories (comma-separated):'))
         layout.addWidget(self.row_categories_line)
 
         # categories for column variable, i.e. column names
         self.col_categories_line = QLineEdit('1,2,3,4,5,6,7,8,9,10,11,12')
-        layout.addWidget(QLabel('*Column categories (comma-separated):'))
+        layout.addWidget(QLabel('Column categories (comma-separated):'))
         layout.addWidget(self.col_categories_line)
 
         # order of variables in the visualisation
@@ -112,7 +112,7 @@ class Grid2TableWindow(QWidget):
         self.ncols_spin = QSpinBox()
         self.ncols_spin.setMinimum(1)
         self.ncols_spin.setValue(3)
-        layout.addWidget(QLabel('*Number of columns for subplots:'))
+        layout.addWidget(QLabel('Number of columns for subplots:'))
         layout.addWidget(self.ncols_spin)
 
         # check box to add annotations to the heatmap
@@ -127,8 +127,6 @@ class Grid2TableWindow(QWidget):
         # check box to remove rows containing NA values from the dataframe
         self.remove_na_cb = QCheckBox('Remove rows with NA values')
         layout.addWidget(self.remove_na_cb)
-
-        layout.addWidget(QLabel('Required fields.*'))
 
         # run or done button to begin processing
         self.run_btn = QPushButton('Run Grid2Table')
@@ -155,9 +153,9 @@ class Grid2TableWindow(QWidget):
         remove_rows_with_na = self.remove_na_cb.isChecked()
 
         # optional variables
-        output_path = self.output_path_label.text() or None
-        filename = self.filename_line.text() or None
-        plate_id = self.plate_id_line.text() or None
+        output_path = self.output_path_label.text() if self.output_path_label.text() != 'No file folder selected' else None
+        filename = self.filename_line.text() if self.filename_line.text() else None
+        plate_id = self.plate_id_line.text() if self.plate_id_line.text() else None
 
         # split at ','
         row_categories = self.row_categories_line.text().split(',')
@@ -207,9 +205,9 @@ class MeasureDoseResponseWindow(QWidget):
         layout.addWidget(QLabel("Options to Measure Dose Response"))
 
         # select path to file containing dose response data
-        self.dose_response_file_btn = QPushButton('*Select file containing dose response data')
-        self.dose_response_file_label = QLabel('No file selected')
+        self.dose_response_file_btn = QPushButton('Select file containing dose response data')
         self.dose_response_file_btn.clicked.connect(self.select_input_folder)
+        self.dose_response_file_label = QLabel('No file selected')
         layout.addWidget(self.dose_response_file_btn)
         layout.addWidget(self.dose_response_file_label)
 
@@ -237,12 +235,12 @@ class MeasureDoseResponseWindow(QWidget):
 
         # percentile of inhibition to calculate
         self.ic_percentile_line = QLineEdit('50')
-        layout.addWidget(QLabel('*Percentile of inhibition to calculate (e.g., 50 for IC50, 30 for IC30):'))
+        layout.addWidget(QLabel('Percentile of inhibition to calculate (e.g., 50 for IC50, 30 for IC30):'))
         layout.addWidget(self.ic_percentile_line)
 
         # min. % change required to consider valid dose response
         self.threshold_pct_line = QLineEdit('10')
-        layout.addWidget(QLabel('*Minimum percent change required to consider a valid dose-response:'))
+        layout.addWidget(QLabel('Minimum percent change required to consider a valid dose-response:'))
         layout.addWidget(self.threshold_pct_line)
 
         # variables to group by
@@ -267,12 +265,12 @@ class MeasureDoseResponseWindow(QWidget):
 
         # dose variable name
         self.dose_var_line = QLineEdit('Dose')
-        layout.addWidget(QLabel('*Dose variable name:'))
+        layout.addWidget(QLabel('Dose variable name:'))
         layout.addWidget(self.dose_var_line)
 
         # response variable name
         self.response_var_line = QLineEdit('Response')
-        layout.addWidget(QLabel('*Response variable name:'))
+        layout.addWidget(QLabel('Response variable name:'))
         layout.addWidget(self.response_var_line)
 
         # normalise response variable
@@ -293,12 +291,12 @@ class MeasureDoseResponseWindow(QWidget):
         # calculate IC value relative to control, or within range of response variable for each treatment
         self.ic_method_combo = QComboBox()
         self.ic_method_combo.addItems(['relative', 'inner range'])
-        layout.addWidget(QLabel('*Method of calculating the IC value; whether relative to control, or within the range of the response variable for each treatment'))
+        layout.addWidget(QLabel('Method of calculating the IC value; whether relative to control, or within the range of the response variable for each treatment'))
         layout.addWidget(self.ic_method_combo)
 
         # unit of the x-axis
         self.x_unit_line = QLineEdit('µM')
-        layout.addWidget(QLabel('*Unit of the x-axis:'))
+        layout.addWidget(QLabel('Unit of the x-axis:'))
         layout.addWidget(self.x_unit_line)
 
         # unit of the y-axis
@@ -309,12 +307,10 @@ class MeasureDoseResponseWindow(QWidget):
         # row/column variable names for plotting layouts
         self.row_var_line = QLineEdit('row')
         self.col_var_line = QLineEdit('col')
-        layout.addWidget(QLabel('*Row variable name for plotting layouts:'))
+        layout.addWidget(QLabel('Row variable name for plotting layouts:'))
         layout.addWidget(self.row_var_line)
-        layout.addWidget(QLabel('*Column variable name for plotting layouts:'))
-        layout.addWidget(self.col_var_line)     
-
-        layout.addWidget(QLabel('Required fields.*'))
+        layout.addWidget(QLabel('Column variable name for plotting layouts:'))
+        layout.addWidget(self.col_var_line)
 
         # run or done button to begin processing
         self.run_btn = QPushButton('Measure Dose Response')
@@ -358,7 +354,7 @@ class MeasureDoseResponseWindow(QWidget):
 
         # optional variables
         var2add = self.var2add_line.text() if self.var2add_line.text() else None
-        cal_file = self.cal_file or None
+        cal_file = self.cal_file if self.cal_file else None
         control_same_var = self.control_same_var_line.text() if self.control_same_var_line.text() else None
         inferred_var = self.inferred_var_line.text() if self.inferred_var_line.text() else None
         y_unit = self.y_unit_line.text() if self.y_unit_line.text() else None
@@ -738,7 +734,7 @@ class CountPlotWindow(QWidget):
         layout.addWidget(QLabel("Count Plot Options"))
 
         # select path to input file
-        self.input_path_btn = QPushButton('*Select input folder')
+        self.input_path_btn = QPushButton('Select input folder')
         self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
                                                                 'Select input folder'))
         self.input_path_label = QLabel('No file selected')
@@ -746,7 +742,7 @@ class CountPlotWindow(QWidget):
         layout.addWidget(self.input_path_label)        
 
         # select path to output folder
-        self.output_path_btn = QPushButton('*Select output folder')
+        self.output_path_btn = QPushButton('Select output folder')
         self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
                                                                    'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
@@ -754,7 +750,7 @@ class CountPlotWindow(QWidget):
         layout.addWidget(self.output_path_label)
 
         # select path to file containing plate layout
-        self.plate_layout_btn = QPushButton('*Select file containing plate layout')
+        self.plate_layout_btn = QPushButton('Select file containing plate layout')
         self.plate_layout_btn.clicked.connect(lambda: select_file(self, self.plate_layout_label,
                                                                   'Select file containing plate layout'))
         self.plate_layout_label = QLabel('No file selected')
@@ -763,17 +759,17 @@ class CountPlotWindow(QWidget):
 
         # suffix of image files
         self.suffix_line = QLineEdit('.tif')
-        layout.addWidget(QLabel('*Suffix of image files:'))
+        layout.addWidget(QLabel('Suffix of image files:'))
         layout.addWidget(self.suffix_line)
 
         # start and stop indices of well name in filename
         self.filename_well_line = QLineEdit('4,7')
-        layout.addWidget(QLabel('*Indices of well name in filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of well name in filename (start,stop):'))
         layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field number in filename
         self.filename_field_line = QLineEdit('17,21')
-        layout.addWidget(QLabel('*Indices of field number in filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of field number in filename (start,stop):'))
         layout.addWidget(self.filename_field_line)
 
         # list of wells to skip
@@ -783,12 +779,12 @@ class CountPlotWindow(QWidget):
 
         # colour map to use for boxplots
         self.cmap_line = QLineEdit('cet_glasbey')
-        layout.addWidget(QLabel('*Colour map to use for boxplots:'))
+        layout.addWidget(QLabel('Colour map to use for boxplots:'))
         layout.addWidget(self.cmap_line)
 
         # variables to use for colour encoding
         self.condition_vars_line = QLineEdit('Treat,Dose')
-        layout.addWidget(QLabel('*Variables to use for colour encoding (comma-separated):'))
+        layout.addWidget(QLabel('Variables to use for colour encoding (comma-separated):'))
         layout.addWidget(self.condition_vars_line)
 
         # list of condition combinations to remove from the palette
@@ -801,7 +797,7 @@ class CountPlotWindow(QWidget):
         layout.addWidget(self.check_batches_cb)
 
         # label for y-axis
-        self.y_label_line = QLineEdit('*Object Count')
+        self.y_label_line = QLineEdit('Object Count')
         layout.addWidget(QLabel('Label for y-axis:'))
         layout.addWidget(self.y_label_line)
 
@@ -812,7 +808,7 @@ class CountPlotWindow(QWidget):
 
         # width of boxes in the boxplot
         self.box_width_line = QLineEdit('0.8')
-        layout.addWidget(QLabel('*Width of boxes in the boxplot:'))
+        layout.addWidget(QLabel('Width of boxes in the boxplot:'))
         layout.addWidget(self.box_width_line)
 
         # add jitter to the points
@@ -822,17 +818,17 @@ class CountPlotWindow(QWidget):
         # type of plot to create
         self.plot_type_combo = QComboBox()
         self.plot_type_combo.addItems(['box', 'violin', 'swarm'])
-        layout.addWidget(QLabel('*Type of plot to create:'))
+        layout.addWidget(QLabel('Type of plot to create:'))
         layout.addWidget(self.plot_type_combo)
 
         # format for output figures
         self.output_format_line = QLineEdit('png')
-        layout.addWidget(QLabel('*Format for output figures:'))
+        layout.addWidget(QLabel('Format for output figures:'))
         layout.addWidget(self.output_format_line)
 
         # DPI for output figures
         self.dpi_line = QLineEdit('150')
-        layout.addWidget(QLabel('*DPI for output figures:'))
+        layout.addWidget(QLabel('DPI for output figures:'))
         layout.addWidget(self.dpi_line)
 
         # save counts to CSV file
@@ -848,8 +844,6 @@ class CountPlotWindow(QWidget):
         self.rep_id_line = QLineEdit()
         layout.addWidget(QLabel('Rep ID to use.\nOverwrites plate_layout automatically.\nUseful if rep ID is not in the filename. (optional):'))
         layout.addWidget(self.rep_id_line)
-
-        layout.addWidget(QLabel('Required fields.*'))
 
         # run or done button to begin processing
         self.run_btn = QPushButton('Visualise Count Plot')
@@ -1006,7 +1000,7 @@ class GridPlotWindow(QWidget):
         layout.addWidget(QLabel("Grid Plot Options"))
 
         # select path to input folder
-        self.input_path_btn = QPushButton('*Select input folder')
+        self.input_path_btn = QPushButton('Select input folder')
         self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
                                                                   'Select input folder'))
         self.input_path_label = QLabel('No folder selected')
@@ -1014,7 +1008,7 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.input_path_label)
 
         # select path to output folder
-        self.output_path_btn = QPushButton('*Select output folder')
+        self.output_path_btn = QPushButton('Select output folder')
         self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
                                                                    'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
@@ -1022,7 +1016,7 @@ class GridPlotWindow(QWidget):
         layout.addWidget(self.output_path_label)
 
         # select path to file containing plate layout
-        self.plate_layout_btn = QPushButton('*Select file containing plate layout')
+        self.plate_layout_btn = QPushButton('Select file containing plate layout')
         self.plate_layout_btn.clicked.connect(lambda: select_file(self, self.plate_layout_label,
                                                                   'Select file containing plate layout'))
         self.plate_layout_label = QLabel('No file selected')
@@ -1031,17 +1025,17 @@ class GridPlotWindow(QWidget):
 
         # suffix of image files
         self.suffix_line = QLineEdit('.nd2')
-        layout.addWidget(QLabel('*Suffix of image files:'))
+        layout.addWidget(QLabel('Suffix of image files:'))
         layout.addWidget(self.suffix_line)
 
         # start and stop indices of well name in the filename
         self.filename_well_line = QLineEdit('4,7')
-        layout.addWidget(QLabel('*Indices of well name in filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of well name in filename (start,stop):'))
         layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field number in the filename
         self.filename_field_line = QLineEdit('17,21')
-        layout.addWidget(QLabel('*Indices of field number in filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of field number in filename (start,stop):'))
         layout.addWidget(self.filename_field_line)
 
         # list of wells to skip
@@ -1057,7 +1051,7 @@ class GridPlotWindow(QWidget):
 
         # channels to use for making the plots
         self.channels2use_line = QLineEdit('0')
-        layout.addWidget(QLabel('*Channels to use for making the plots (comma-separated):'))
+        layout.addWidget(QLabel('Channels to use for making the plots (comma-separated):'))
         layout.addWidget(self.channels2use_line)
 
         # well(s) to use as reference for normalisation using its percentiles
@@ -1079,12 +1073,12 @@ class GridPlotWindow(QWidget):
 
         # colour map to apply to image borders in grid plot
         self.cmap_line = QLineEdit('cet_glasbey')
-        layout.addWidget(QLabel('*Colour map to use for boxplots:'))
+        layout.addWidget(QLabel('Colour map to use for boxplots:'))
         layout.addWidget(self.cmap_line)
 
         # variables to use for colour encoding
         self.condition_vars_line = QLineEdit('Treat,Dose')
-        layout.addWidget(QLabel('*Variables to use for colour encoding (comma-separated):'))
+        layout.addWidget(QLabel('Variables to use for colour encoding (comma-separated):'))
         layout.addWidget(self.condition_vars_line)
 
         # list of condition combinations to remove from the palette
@@ -1110,8 +1104,6 @@ class GridPlotWindow(QWidget):
         self.rep_id_line = QLineEdit()
         layout.addWidget(QLabel('Rep ID to use.\nOverwrites plate_layout automatically.\nUseful if rep ID is not in the filename. (optional):'))
         layout.addWidget(self.rep_id_line)
-
-        layout.addWidget(QLabel('Required fields.*'))
 
         # run or done button to begin processing
         self.run_btn = QPushButton('Visualise Grid Plot')
@@ -1144,7 +1136,7 @@ class GridPlotWindow(QWidget):
         condition_vars = self.condition_vars_line.text().split(',')
         
         # optional variables
-        ff_path = self.ff_path_label.text() if self.ff_path_label.text() else None
+        ff_path = self.ff_path_label.text() if self.ff_path_label.text() != 'No image selected' else None
         plate_id = self.plate_id_line.text() if self.plate_id_line.text() else None
         rep_id = self.rep_id_line.text() if self.rep_id_line.text() else None
 
@@ -1272,7 +1264,7 @@ class ChannelPlotWindow(QWidget):
         layout.addWidget(QLabel("Channel Plot Options"))
 
         # select path to input folder
-        self.input_path_btn = QPushButton('*Select input folder')
+        self.input_path_btn = QPushButton('Select input folder')
         self.input_path_btn.clicked.connect(lambda: select_folder(self, self.input_path_label,
                                                                   'Select input folder'))
         self.input_path_label = QLabel('No folder selected')
@@ -1280,7 +1272,7 @@ class ChannelPlotWindow(QWidget):
         layout.addWidget(self.input_path_label)
 
         # select path to output folder
-        self.output_path_btn = QPushButton('*Select output folder')
+        self.output_path_btn = QPushButton('Select output folder')
         self.output_path_btn.clicked.connect(lambda: select_folder(self, self.output_path_label,
                                                                    'Select output folder'))
         self.output_path_label = QLabel('No folder selected')
@@ -1290,17 +1282,17 @@ class ChannelPlotWindow(QWidget):
         # type of image to plot
         self.img_type_combo = QComboBox()
         self.img_type_combo.addItems(['grayscale', 'multichannel'])
-        layout.addWidget(QLabel('*Type of image to plot'))
+        layout.addWidget(QLabel('Type of image to plot'))
         layout.addWidget(self.img_type_combo)
 
         # channels to use for making the plots
         self.channels2use_line = QLineEdit('0')
-        layout.addWidget(QLabel('*Channels to use for making the plots (comma-separated):'))
+        layout.addWidget(QLabel('Channels to use for making the plots (comma-separated):'))
         layout.addWidget(self.channels2use_line)
 
         # suffix of image files
         self.suffix_line = QLineEdit('.nd2')
-        layout.addWidget(QLabel('*Suffix of image files:'))
+        layout.addWidget(QLabel('Suffix of image files:'))
         layout.addWidget(self.suffix_line)
 
         # normalise the images
@@ -1314,12 +1306,12 @@ class ChannelPlotWindow(QWidget):
 
         # start and stop indices of well name in filename
         self.filename_well_line = QLineEdit('4,7')
-        layout.addWidget(QLabel('*Indices of the well name in the filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of the well name in the filename (start,stop):'))
         layout.addWidget(self.filename_well_line)
 
         # start and stop indices of field numbers in filename
         self.filename_field_line = QLineEdit('17,21')
-        layout.addWidget(QLabel('*Indices of field numbers in filename (start,stop):'))
+        layout.addWidget(QLabel('Indices of field numbers in filename (start,stop):'))
         layout.addWidget(self.filename_field_line)
 
         # select path to image to use for flat field correction
@@ -1332,7 +1324,7 @@ class ChannelPlotWindow(QWidget):
 
         # percentiles to use for image normalisation
         self.percentiles_line = QLineEdit('0.1,99.9')
-        layout.addWidget(QLabel('*Percentiles to use for image normalisation:'))
+        layout.addWidget(QLabel('Percentiles to use for image normalisation:'))
         layout.addWidget(self.percentiles_line)
 
         # patterns in filename to ignore
@@ -1352,10 +1344,8 @@ class ChannelPlotWindow(QWidget):
 
         # type of output to save
         self.output_type_line = QLineEdit('channels,composite')
-        layout.addWidget(QLabel('*Type of output to save:'))
+        layout.addWidget(QLabel('Type of output to save:'))
         layout.addWidget(self.output_type_line)
-
-        layout.addWidget(QLabel('Required fields.*'))
 
         # run or done button to begin processing
         self.run_btn = QPushButton('Visualise Channel Plot')
@@ -1385,7 +1375,7 @@ class ChannelPlotWindow(QWidget):
         output_type = self.output_type_line.text().split(',')
         
         # optional variables
-        ff_path = self.select_img_label.text() if self.select_img_label.text() else None
+        ff_path = self.select_img_label.text() if self.select_img_label.text() != 'No image selected' else None
 
         # only split at ',' if text exists
         ref_wells = self.ref_wells_line.text().split(',') if self.ref_wells_line.text() else None
