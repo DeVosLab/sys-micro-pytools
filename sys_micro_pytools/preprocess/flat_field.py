@@ -43,13 +43,14 @@ def compute_flat_field(input_path, from_well=None, skip_wells=None,
                     f.suffix == suffix and not f.stem.startswith('.')])
     if n_images is None:
         n_images = len(files)
-    
+
     if from_well is not None:
         pattern = from_well
         files = [f for f in files if pattern in f.stem]
         type = 'pattern' # Only this pattern is used
     elif skip_wells is not None:
         pattern = skip_wells
+        print(f'Skipping wells: {pattern}')
         files = [f for f in files if pattern not in f.stem]
         type = 'batch' # All wells except this pattern are used
     else:
