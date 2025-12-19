@@ -120,8 +120,10 @@ def create_channel_plots(
                 )
             img_composite = img_norm
         else:
+            print()
+            print(img.shape)
             if channels2use is not None:
-                img = img[channels2use,:,:]
+                img = np.take(img, channels2use, axis=0)
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=0)
             n_channels = img.shape[0]
@@ -137,7 +139,7 @@ def create_channel_plots(
         
         # Save channel plots
         if 'channels' in output_type:
-            _, axes = plt.subplots(1, n_channels, figsize=(4*n_channels, 5))
+            fig, axes = plt.subplots(1, n_channels, figsize=(4*n_channels, 5))
             axes = [axes] if n_channels == 1 else axes # Make sure axes is a list
             for C in range(n_channels):
                 # Plot of all channels
@@ -169,7 +171,7 @@ def create_channel_plots(
 
         # Save composite plots
         if 'composite' in output_type:
-            _, axes = plt.subplots(1, 1, figsize=(9, 9))
+            fig, axes = plt.subplots(1, 1, figsize=(9, 9))
             filename = Path(output_path_composite).joinpath(f'{file.stem}.tif')
             filename.parent.mkdir(exist_ok=True)
             img_composite = np.moveaxis(img_composite.astype(np.float32), 0, 2)
@@ -178,6 +180,7 @@ def create_channel_plots(
                 img_composite,
                 photometric='rgb',
                 )
+            plt.close()
 
 def main(**kwargs):
     """Main function that processes command line arguments and calls create_channel_plots."""
