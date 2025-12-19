@@ -150,6 +150,10 @@ def get_ref_wells_percentiles(df: pd.DataFrame, ref_wells: List[str],
         raise ValueError(f'{well_col} not in df columns')
     
     df_ref = df[df[well_col].isin(ref_wells)]
+
+    if len(df_ref) == 0:
+        raise ValueError(f'No reference wells found in DataFrame')
+
     pmin_vals = np.zeros((n_channels,))
     pmax_vals = np.zeros((n_channels,))
     
