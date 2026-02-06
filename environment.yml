@@ -18,6 +18,8 @@ dependencies:
   - certifi
   - openssl
   - pyvista
+  - bioio
+  - bioio-lif
   - pip
   - pip:
     - click
