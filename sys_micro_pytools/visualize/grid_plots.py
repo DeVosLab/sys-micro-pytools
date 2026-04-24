@@ -99,7 +99,7 @@ def create_grid_plot(
         condition_vars: Union[list, tuple, str],
         palette: dict,
         field_idx: Union[list, tuple, int]=None,
-        img_type: Literal['multi_channel', 'grayscale', 'mask']='multi_channel',
+        img_type: Literal['multichannel', 'grayscale', 'mask']='multichannel',
         channels2use: Union[list, tuple, int]=None,
         ref_wells: Union[list, tuple, str]=None,
         pmin: float=0.1, pmax: float=99.9,
@@ -111,13 +111,14 @@ def create_grid_plot(
     n_cols = len(cols)
     if field_idx is not None:
         if isinstance(field_idx, int):
-            field_idx = [field_idx]
-        if len(field_idx) == 1:
-            field_idx = n_rows * n_cols * field_idx
+            field_idx = [field_idx] * (n_rows * n_cols)
         else:
-            assert len(field_idx) == n_rows * n_cols, \
-                'field_idx must be a single integer or a list/tuple of length n_rows * n_cols'
-            field_idx = field_idx
+            field_idx = list(field_idx)
+            if len(field_idx) == 1:
+                field_idx = field_idx * (n_rows * n_cols)
+            else:
+                assert len(field_idx) == n_rows * n_cols, \
+                    'field_idx must be a single integer or a list/tuple of length n_rows * n_cols'
 
     if ref_wells is not None:
         pmin_vals, pmax_vals = get_ref_wells_percentiles(
@@ -131,8 +132,54 @@ def create_grid_plot(
         pmin_vals = None
         pmax_vals = None
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2 * n_cols + 3, 2 * n_rows))
-    count = 0
+    # Estimate legend width (in inches) from the longest label / title so it
+    # fits inside the figure even without bbox_inches='tight' when saving.
+    def _format_condition(cond):
+        if isinstance(cond, tuple):
+            return ', '.join(str(c) for c in cond)
+        return str(cond)
+
+    legend_fontsize = 12
+    legend_labels = [_format_condition(cond) for cond in palette]
+    legend_title = ' - '.join(condition_vars)
+    max_label_chars = max([len(lbl) for lbl in legend_labels] + [len(legend_title)])
+    # ~0.085 in per character at fontsize 12 + color swatch + padding
+    legend_inch = 0.085 * legend_fontsize / 12 * max_label_chars + 1.0
+
+    # Compute figure layout in inches so margins/legend scale with grid size
+    cell_size = 2.0
+    left_inch = 0.6    # space for row labels
+    right_inch = legend_inch  # space for legend
+    top_inch = 0.9     # space for title + column labels
+    bottom_inch = 0.1
+    fig_width = cell_size * n_cols + left_inch + right_inch
+    fig_height = cell_size * n_rows + top_inch + bottom_inch
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(fig_width, fig_height),
+        gridspec_kw={
+            'wspace': 0.0,
+            'hspace': 0.0,
+            'left': left_inch / fig_width,
+            'right': 1 - right_inch / fig_width,
+            'top': 1 - top_inch / fig_height,
+            'bottom': bottom_inch / fig_height,
+        },
+    )
+
+    # Ensure axes is always 2D for consistent indexing
+    axes = np.atleast_2d(axes)
+    if n_rows == 1 and n_cols > 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1 and n_rows > 1:
+        axes = axes.reshape(-1, 1)
+
+    # Clear ticks for all axes (including empty cells)
+    for ax in axes.flat:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
     conditions = []
     for r, row in enumerate(rows):
         for c, col in enumerate(cols):
@@ -143,10 +190,9 @@ def create_grid_plot(
             condition_color = palette[condition_vals]
             conditions.append(condition_vals)
 
-            # Randomly select a field from the well
+            # Pick which field of view to show for this well
             if field_idx is not None:
-                idx = field_idx[count]
-                count += 1
+                idx = field_idx[r * n_cols + c]
             else:
                 idx = random.randint(0, df_row_col.shape[0]-1)
             
@@ -157,7 +203,7 @@ def create_grid_plot(
                 # Load image
                 filename = df_row_col['Filename'].values[idx]
                 img = read_tiff_or_nd2(str(filename), bundle_axes='cyx' if \
-                                      img_type == 'multi_channel' else 'yx').astype(float)
+                                      img_type == 'multichannel' else 'yx').astype(float)
             
             if flat_field is not None and img_type != 'mask':
                 img = flat_field_correction(img, flat_field)
@@ -167,7 +213,7 @@ def create_grid_plot(
             order = 1
             if img_type == 'mask':
                 order = 0
-            elif img_type == 'multi_channel':
+            elif img_type == 'multichannel':
                 n_channels = len(channels2use)
                 img = img[channels2use,:,:]
                 shape = (n_channels,) + shape
@@ -180,7 +226,7 @@ def create_grid_plot(
                     pmin_val=pmin_vals, pmax_val=pmax_vals,
                     clip=True,
                 )
-            elif img_type == 'multi_channel':
+            elif img_type == 'multichannel':
                 if channels2use is not None:
                     img = img[channels2use,:,:]
                 if img.ndim == 2:
@@ -202,10 +248,21 @@ def create_grid_plot(
                 img = label2rgb(img, bg_label=0, bg_color=(0, 0, 0))
 
             axes[r, c].imshow(img)
-            axes[r, c].set_xticks([])
-            axes[r, c].set_yticks([])
-            axes[r, c].patch.set_edgecolor(condition_color)  
+            axes[r, c].patch.set_edgecolor(condition_color)
             axes[r, c].patch.set_linewidth(10)
+
+    # Annotate rows (left side) and columns (top) of the grid
+    for c, col in enumerate(cols):
+        axes[0, c].set_title(str(col), fontsize=14, pad=6)
+    for r, row in enumerate(rows):
+        axes[r, 0].set_ylabel(
+            str(row),
+            fontsize=14,
+            rotation=0,
+            labelpad=12,
+            va='center',
+            ha='right',
+        )
 
     # Add a legend on the right side
     legend_elements = []
@@ -219,13 +276,17 @@ def create_grid_plot(
         else:
             label = str(condition)
         legend_elements.append(plt.Rectangle((0, 0), 1, 1, color=color, label=label))
-    
-    plt.suptitle(title)
-    plt.tight_layout(rect=[0, 0, 0.90, 1])  # Adjust layout to leave space for legend
-    fig.legend(handles=legend_elements, 
-               loc='center right', 
-               title=' - '.join(condition_vars),
-               fontsize=14,
-               bbox_to_anchor=(.95, 0.5),
-               )
+
+    if title is not None:
+        fig.suptitle(title, y=1 - 0.1 / fig_height)
+
+    # Place legend in the reserved right-hand margin so it doesn't overlap the grid
+    legend_x = 1 - right_inch / fig_width + 0.02
+    fig.legend(
+        handles=legend_elements,
+        loc='center left',
+        title=legend_title,
+        fontsize=legend_fontsize,
+        bbox_to_anchor=(legend_x, 0.5),
+    )
     return fig
