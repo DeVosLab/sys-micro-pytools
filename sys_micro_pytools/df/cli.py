@@ -1,11 +1,17 @@
 import click
 from pathlib import Path
+from string import ascii_uppercase
 from .plate_grid2table import plate_grid2table, plot_layout
 
 def empty_to_none(ctx, param, value):
     if value == ():
         return None
     return value
+
+PLATE_TYPE_CATEGORIES = {
+    96: (list(ascii_uppercase[:8]), list(range(1, 13))),
+    384: (list(ascii_uppercase[:16]), list(range(1, 25))),
+}
 
 @click.group()
 def df():
@@ -22,10 +28,12 @@ def df():
               help="Whether to visualize the plate layout.")
 @click.option('--plate_id', type=click.STRING, default=None,
               help="The plate index to be visualized. If not specified, all plates will be visualized.")
-@click.option('--row_categories', type=click.STRING, multiple=True, default=['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
-              help="Categories for the row variable.")
-@click.option('--col_categories', type=click.INT, multiple=True, default=list(range(1, 13)),
-              help="Categories for the column variable.")
+@click.option('--plate_type', type=click.Choice(['96', '384']), default='96',
+              help="Plate format used to derive default row/col categories. Ignored when --row_categories or --col_categories are provided.")
+@click.option('--row_categories', type=click.STRING, multiple=True, callback=empty_to_none,
+              help="Categories for the row variable. Overrides the defaults implied by --plate_type.")
+@click.option('--col_categories', type=click.INT, multiple=True, callback=empty_to_none,
+              help="Categories for the column variable. Overrides the defaults implied by --plate_type.")
 @click.option('--var_order', type=click.STRING, multiple=True, callback=empty_to_none,
               help="Order of the variables in the visualization.")
 @click.option('--ncols', type=click.INT, default=3,
@@ -36,8 +44,8 @@ def df():
               help="Variables to be treated as numeric in the visualization.")
 @click.option('--remove_rows_with_na', is_flag=True,
               help="Whether to remove rows with NA values from the dataframe.")
-def plate_grid2table_cli(input_path, output_path, filename, visualize, plate_id, 
-                         row_categories, col_categories, var_order, ncols, 
+def plate_grid2table_cli(input_path, output_path, filename, visualize, plate_id,
+                         plate_type, row_categories, col_categories, var_order, ncols,
                          add_annot, numeric_vars, remove_rows_with_na):
     """Convert a plate layout provided as grids in a .xlsx file(s) into a table in a .csv file.
 
@@ -48,26 +56,25 @@ def plate_grid2table_cli(input_path, output_path, filename, visualize, plate_id,
     df = plate_grid2table(input_path, remove_rows_with_na)
 
     # Save the merged layout dataframe
-    if output_path:
-        output_path = Path(output_path)  
-        filename = Path(filename) if filename else None
-        if filename is None:
-            parent_folder = None
-            if isinstance(input_path, list) and len(input_path) > 1:
-                parent_folder = Path(input_path[0]).parent
-                for path in input_path[1:]:
-                    if Path(path).parent != parent_folder:
-                        parent_folder = None
-                        break
-                if parent_folder:
-                    filename = Path(parent_folder.name + '.csv')
-        filename = Path(Path(input_path[0]).name).with_suffix('.csv') if filename is None else filename
-        assert filename.suffix == '.csv', "Output file must be a CSV file."
-        filename = output_path.joinpath(filename)
-        df.to_csv(filename, index=False)
+    input_path_obj = Path(input_path)
+    output_path = Path(output_path) if output_path else input_path_obj.parent
+    filename = Path(filename) if filename else Path(input_path_obj.name).with_suffix('.csv')
+    assert filename.suffix == '.csv', "Output file must be a CSV file."
+    output_file = output_path / filename
+    if output_file.resolve() == input_path_obj.resolve():
+        raise click.UsageError(
+            f"Output file '{output_file}' matches the input file. "
+            "Choose a different --output_path or --filename to avoid overwriting the input."
+        )
+    df.to_csv(output_file, index=False)
 
     # Visualize the plate layout
     if visualize:
+        default_rows, default_cols = PLATE_TYPE_CATEGORIES[int(plate_type)]
+        if row_categories is None:
+            row_categories = default_rows
+        if col_categories is None:
+            col_categories = default_cols
         if plate_id is None:
             plate_id = sorted(df['plate'].unique())
         for plate in plate_id:
