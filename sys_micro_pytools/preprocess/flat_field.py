@@ -18,7 +18,11 @@ def reduce_imgs(files, bundle_axes, method='mean'):
     
     reduced_img = None
     for i, f in enumerate(tqdm(files)):
-        img = read_tiff_or_nd2(str(f), bundle_axes=bundle_axes).astype(float)
+        try:
+            img = read_tiff_or_nd2(str(f), bundle_axes=bundle_axes).astype(float)
+        except Exception as e:
+            print(f'Error reading image {f}: {e}')
+            continue
 
         if method == 'medain':
             img = np.expand_dims(img, axis=0)
