@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 from sys_micro_pytools.io import read_tiff_or_nd2
+from sys_micro_pytools.visualize.visualize import _cond_token
 
 def count_objects_in_mask(mask_file: Union[str, Path]) -> int:
     ''' Count the number of objects in a mask image
@@ -57,6 +58,13 @@ def create_count_df(df: pd.DataFrame) -> pd.DataFrame:
     df_counts['Count'] = counts
     
     return df_counts
+
+def _condition_label(row: pd.Series, condition_vars: list[str]) -> str | None:
+    tokens = [_cond_token(row[var]) for var in condition_vars]
+    # If any condition value is missing, mark this row as invalid for hue
+    if any(token is None for token in tokens):
+        return None
+    return ", ".join(tokens)
 
 
 def create_count_plot(
@@ -109,15 +117,18 @@ def create_count_plot(
     
     # Create categorical column based on condition variables
     df['Condition'] = df.apply(
-        lambda row: ', '.join([str(row[var]) for var in condition_vars]),
+        lambda row: _condition_label(row, condition_vars),
         axis=1
     )
+
+    # Remove rows where condition is None
+    df = df[df['Condition'].notna()].copy()
     
     # Map condition names to colors
     condition_colors = {}
     for condition, color in palette.items():
         if isinstance(condition, tuple):
-            condition_name = ', '.join([str(c) for c in condition])
+            condition_name = ', '.join([_cond_token(c) for c in condition])
         else:
             condition_name = str(condition)
         condition_colors[condition_name] = color

@@ -151,8 +151,11 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help='List of condition combinations to remove from the palette, e.g. --conditions2remove "DMSO,L"')
 @click.option('--check_batches', is_flag=True,
               help='Check if input_path contains subdirectories')
-@click.option('--field_idx', type=int, multiple=True, default=None,
-              help='Index of the field to plot for each well. If None, a random field will be selected')
+@click.option('--field_idx', type=int, multiple=True, callback=empty_to_none,
+              help=('Index of the field to plot for each well. '
+                    'Pass once to use the same field for every well, or pass n_rows * n_cols times '
+                    'to set a specific field per grid position. '
+                    'If omitted, a random field will be selected per well.'))
 @click.option('--plate_id', type=str, default=None,
               help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. '
                     'This is useful if the plate ID is not in the filename.'))
@@ -177,10 +180,9 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
     if conditions2remove is not None:
         conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
 
-    if isinstance(field_idx, int):
-        field_idx = [field_idx]
-    for idx in field_idx:
-        assert idx >= 0, 'field_idx must be a positive integer'
+    if field_idx is not None:
+        for idx in field_idx:
+            assert idx >= 0, 'field_idx must be a non-negative integer'
 
     # Set color palette for treatments
     plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python'); 
