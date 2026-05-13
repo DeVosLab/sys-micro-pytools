@@ -28,7 +28,8 @@ def create_channel_plots(
     pattern2ignore: Optional[List[str]] = None,
     patterns2have: Optional[List[str]] = None,
     field_idx: Optional[int] = None,
-    output_type: List[str] = ['channels', 'composite']
+    output_type: List[str] = ['channels', 'composite'],
+    colors: Optional[List[str]] = None,
 ) -> None:
     """Create channel plots and composite images from multichannel microscopy data.
 
@@ -48,6 +49,8 @@ def create_channel_plots(
         patterns2have: Patterns required in filename
         field_idx: Index of field to plot
         output_type: Type of output to save ('channels' and/or 'composite')
+        colors: Colors to use for each channel in the composite image. If None,
+            the default colors of ``create_composite`` are used.
     """
     # Convert paths to Path objects
     input_path = Path(input_path)
@@ -135,7 +138,8 @@ def create_channel_plots(
                 pmax_vals=pmax_vals if ref_wells is not None else None,
                 clip=True
                 )
-            img_composite = create_composite(img_norm, channel_dim=0)
+            composite_kwargs = {} if colors is None else {'colors': colors}
+            img_composite = create_composite(img_norm, channel_dim=0, **composite_kwargs)
         
         # Save channel plots
         if 'channels' in output_type:
@@ -199,7 +203,8 @@ def main(**kwargs):
         pattern2ignore=kwargs['pattern2ignore'],
         patterns2have=kwargs['patterns2have'],
         field_idx=kwargs['field_idx'],
-        output_type=kwargs['output_type']
+        output_type=kwargs['output_type'],
+        colors=kwargs['colors'],
     )
 
 def parse_args():
@@ -235,6 +240,8 @@ def parse_args():
         help='Index of field to plot (default: None)')
     parser.add_argument('--output_type', type=str, nargs='+', default=['channels', 'composite'],
         help='Type of output to save (default: channels and composite)')
+    parser.add_argument('--colors', type=str, nargs='+', default=None,
+        help='Colors to use for each channel in the composite image (default: None, uses defaults of create_composite)')
     args = parser.parse_args()
 
     if isinstance(args.channels2use, int):

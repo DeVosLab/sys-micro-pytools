@@ -45,6 +45,12 @@ def create_palette(plate_layout: pd.DataFrame, condition_vars: Union[Tuple, List
     return palette, condition_order
 
 
+def _format_condition(cond):
+    if isinstance(cond, tuple):
+        return ', '.join(str(c) for c in cond)
+    return str(cond)
+
+
 def main():
     pass
 

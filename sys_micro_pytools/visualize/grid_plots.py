@@ -13,6 +13,7 @@ from sys_micro_pytools.io import read_tiff_or_nd2
 from sys_micro_pytools.preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
 from sys_micro_pytools.preprocess.flat_field import flat_field_correction
 from sys_micro_pytools.preprocess.composite import create_composite
+from sys_micro_pytools.visualize.visualize import _format_condition
 
 
 def get_df_images(input_path: str | Path, check_batches: bool, suffix: str,
@@ -134,11 +135,6 @@ def create_grid_plot(
 
     # Estimate legend width (in inches) from the longest label / title so it
     # fits inside the figure even without bbox_inches='tight' when saving.
-    def _format_condition(cond):
-        if isinstance(cond, tuple):
-            return ', '.join(str(c) for c in cond)
-        return str(cond)
-
     legend_fontsize = 12
     legend_labels = [_format_condition(cond) for cond in palette]
     legend_title = ' - '.join(condition_vars)
@@ -271,10 +267,7 @@ def create_grid_plot(
             continue
 
         # Format the condition label
-        if isinstance(condition, tuple):
-            label = ', '.join(str(c) for c in condition)
-        else:
-            label = str(condition)
+        label = _format_condition(condition)
         legend_elements.append(plt.Rectangle((0, 0), 1, 1, color=color, label=label))
 
     if title is not None:
