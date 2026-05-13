@@ -1,14 +1,11 @@
 import click
 from pathlib import Path
 import tifffile
+
+from sys_micro_pytools.cli_utils import split_ws
 from sys_micro_pytools.preprocess.flat_field import compute_flat_field
 from sys_micro_pytools.preprocess.split_nd2 import split_nd2, split_nd2_folder
 
-
-def empty_to_none(ctx, param, value):
-    if value == ():
-        return None
-    return value
 
 @click.group()
 def preprocess():
@@ -27,8 +24,9 @@ def preprocess():
               help='Number of images to use to generate the flat field')
 @click.option('--from_well', type=click.STRING, default=None,
               help='Well to use to generate the flat field. If None, use n random images from the input path to generate the flat field')
-@click.option('--skip_wells', type=click.STRING, multiple=True, callback=empty_to_none,
-              help='Wells to ignore when generating the flat field. If None, use all wells.')
+@click.option('--skip_wells', type=str, default=None, callback=split_ws(item_type=str),
+              help='Wells to ignore when generating the flat field (whitespace-separated), '
+                   'e.g. --skip_wells "A01 B02". If omitted, wells are not filtered by well name here.')
 @click.option('--grayscale', is_flag=True, default=False,
               help='Use grayscale images instead of RGB images.')
 @click.option('--method', type=click.Choice(['mean', 'median']), default='mean',

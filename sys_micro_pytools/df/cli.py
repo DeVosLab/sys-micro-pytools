@@ -1,12 +1,10 @@
 import click
 from pathlib import Path
 from string import ascii_uppercase
-from .plate_grid2table import plate_grid2table, plot_layout
 
-def empty_to_none(ctx, param, value):
-    if value == ():
-        return None
-    return value
+from sys_micro_pytools.cli_utils import split_ws
+
+from .plate_grid2table import plate_grid2table, plot_layout
 
 PLATE_TYPE_CATEGORIES = {
     96: (list(ascii_uppercase[:8]), list(range(1, 13))),
@@ -30,18 +28,20 @@ def df():
               help="The plate index to be visualized. If not specified, all plates will be visualized.")
 @click.option('--plate_type', type=click.Choice(['96', '384']), default='96',
               help="Plate format used to derive default row/col categories. Ignored when --row_categories or --col_categories are provided.")
-@click.option('--row_categories', type=click.STRING, multiple=True, callback=empty_to_none,
-              help="Categories for the row variable. Overrides the defaults implied by --plate_type.")
-@click.option('--col_categories', type=click.INT, multiple=True, callback=empty_to_none,
-              help="Categories for the column variable. Overrides the defaults implied by --plate_type.")
-@click.option('--var_order', type=click.STRING, multiple=True, callback=empty_to_none,
-              help="Order of the variables in the visualization.")
+@click.option('--row_categories', type=str, default=None, callback=split_ws(item_type=str),
+              help=('Categories for the row variable. Overrides the defaults implied by --plate_type. '
+                    'e.g. --row_categories "A B C D E F G H"'))
+@click.option('--col_categories', type=str, default=None, callback=split_ws(item_type=int),
+              help=('Categories for the column variable. Overrides the defaults implied by --plate_type. '
+                    'e.g. --col_categories "1 2 3 4 5 6 7 8 9 10 11 12"'))
+@click.option('--var_order', type=str, default=None, callback=split_ws(item_type=str),
+              help='Order of the variables in the visualization, e.g. --var_order "Treat Dose Well"')
 @click.option('--ncols', type=click.INT, default=3,
               help="Number of columns for the subplots in the visualization.")
 @click.option('--add_annot', is_flag=True,
               help="Whether to add annotations to the heatmap.")
-@click.option('--numeric_vars', type=click.STRING, multiple=True, callback=empty_to_none,
-              help="Variables to be treated as numeric in the visualization.")
+@click.option('--numeric_vars', type=str, default=None, callback=split_ws(item_type=str),
+              help='Variables to be treated as numeric in the visualization, e.g. --numeric_vars "Conc Vol"')
 @click.option('--remove_rows_with_na', is_flag=True,
               help="Whether to remove rows with NA values from the dataframe.")
 def plate_grid2table_cli(input_path, output_path, filename, visualize, plate_id,

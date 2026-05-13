@@ -5,14 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from sys_micro_pytools.cli_utils import split_ws
 from sys_micro_pytools.df import plate_grid2table
 from sys_micro_pytools.visualize import get_nice_ticks
 from sys_micro_pytools.measure import calibration_curve, calculate_ic_value
 
-def empty_to_none(ctx, param, value):
-    if value == ():
-        return None
-    return value
 
 @click.group()
 def measure():
@@ -20,26 +17,29 @@ def measure():
     pass
 
 @measure.command(name='dose-response')
-@click.option('--filename_dose','-f', type=click.Path(exists=True), multiple=True, callback=empty_to_none,
-              help='Path to dose response data')
+@click.option('--filename_dose', '-f', type=str, required=True,
+              callback=split_ws(item_type=str, check_path_exists=True),
+              help='Paths to dose-response CSVs, e.g. -f "dose1.csv dose2.csv"')
 @click.option('--grid2table', is_flag=True, default=False, 
               help='Convert dose response data from grid to table format')
 @click.option('--var2add', type=click.STRING, default=None, 
               help='Variable to add to the dose response data')
-@click.option('--var2add_value', type=click.STRING, multiple=True, default=None, 
-              help='Value of the variable to add to the dose response data. This will be added as a new column to the dose response data with value for each row.')
+@click.option('--var2add_value', type=str, default=None,
+              callback=split_ws(item_type=str),
+              help=('Values paired with each --filename_dose file (same order), '
+                    'e.g. --var2add_value "rep1 rep2"'))
 @click.option('--filename_cal', type=click.Path(exists=True), default=None, 
               help='Path to calibration data')
 @click.option('--ic_percentile', type=click.FLOAT, default=50, 
               help='Percentile of inhibition to calculate (e.g., 50 for IC50, 30 for IC30)')
 @click.option('--threshold_pct', type=click.FLOAT, default=10, 
               help='Minimum percent change required to consider a valid dose-response')
-@click.option('--groupby_vars', type=click.STRING, multiple=True, callback=empty_to_none, 
-              help='Variables to group by, e.g. plate, rep')
-@click.option('--condition_vars', type=click.STRING, multiple=True, callback=empty_to_none, 
-              help='Variables of which unique combinations form a condition')
-@click.option('--control_values', type=click.STRING, multiple=True, callback=empty_to_none, 
-              help='Values of condition variables of the control condition')
+@click.option('--groupby_vars', type=str, default=None, callback=split_ws(item_type=str),
+              help='Variables to group by, e.g. --groupby_vars "Plate Rep"')
+@click.option('--condition_vars', type=str, default=None, callback=split_ws(item_type=str),
+              help='Condition variables (unique combinations), e.g. --condition_vars "Treat Dose"')
+@click.option('--control_values', type=str, default=None, callback=split_ws(item_type=str),
+              help='Control level per condition var, e.g. --control_values "DMSO 0"')
 @click.option('--control_same_var', type=click.STRING, default=None, 
               help='Variable of which the value is be the same for a subgroup of controls and a condition. This can be used to specify which controls are used for normalization, e.g. different DMSO dilutions for different compounds.')
 @click.option('--dose_var', type=click.STRING, default='Dose', 

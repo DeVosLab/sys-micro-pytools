@@ -1,11 +1,11 @@
 import click
-from functools import partial
 from pathlib import Path
 import tifffile
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from sys_micro_pytools.cli_utils import split_ws
 from sys_micro_pytools.preprocess.flat_field import get_flat_field_files
 from sys_micro_pytools.df import link_df2plate_layout
 from sys_micro_pytools.visualize import create_palette
@@ -13,26 +13,6 @@ from sys_micro_pytools.visualize.channel_plots import create_channel_plots
 from sys_micro_pytools.visualize.grid_plots import get_df_images, create_grid_plot
 from sys_micro_pytools.visualize.count_plots import create_count_df, create_count_plot
 
-def empty_to_none(ctx, param, value):
-    if value == ():
-        return None
-    return value
-
-def validate_max_items(ctx, param, value, count):
-    """
-    Validates that a multiple option doesn't exceed a maximum count.
-    
-    Args:
-        ctx: Click context
-        param: The parameter being validated
-        value: The value being validated (list from multiple=True)
-        count: Number of required items
-    """
-    if not len(value) == count:
-        raise click.BadParameter(
-            f'{count} items required for {param.name}, got {len(value)}'
-        )
-    return value
 
 @click.group()
 def cli():
@@ -46,56 +26,47 @@ def cli():
               help='Path to directory where output will be saved')
 @click.option('--img_type', type=click.Choice(['multichannel', 'grayscale']), default='grayscale',
               help='Type of image to plot. Options: multichannel, grayscale')
-@click.option('--channels2use', type=int, multiple=True, default=(0,),
-              help='Channels to use for making the plots')
+@click.option('--channels2use', type=str, default='0', callback=split_ws(item_type=int),
+              help='Channel indices for plots, e.g. --channels2use "0 1 2"')
 @click.option('--suffix', type=str, default='.nd2',
               help='Suffix of image files')
 @click.option('--normalize', is_flag=True,
               help='Normalize the images')
-@click.option('--ref_wells', type=str, multiple=True, callback=empty_to_none,
-              help='Well(s) to use as reference for normalization using its percentiles')
-@click.option('--filename_well_idx', type=int, multiple=True, default=(4,7), 
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the well name in the filename (default: (4,7))')
-@click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the field number in the filename (default: (17,21))')
+@click.option('--ref_wells', type=str, default=None, callback=split_ws(item_type=str),
+              help='Reference wells for normalization percentiles, e.g. --ref_wells "A01 A02"')
+@click.option('--filename_well_idx', type=str, default='4 7',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Well-name slice start/stop indices in filename, e.g. --filename_well_idx "4 7"')
+@click.option('--filename_field_idx', type=str, default='17 21',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Field slice start/stop indices in filename, e.g. --filename_field_idx "17 21"')
 @click.option('--flat_field_path', type=click.Path(), default=None,
               help='Path to image to use as flat field correction')
-@click.option('--percentiles', type=float, multiple=True, default=(0.1, 99.9),
-              callback=partial(validate_max_items, count=2),
-              help='Percentiles to use for image normalization (default: (0.1, 99.9))')
-@click.option('--pattern2ignore', type=str, multiple=True, callback=empty_to_none,
-              help='Pattern to ignore in filename')
-@click.option('--patterns2have', type=str, multiple=True, callback=empty_to_none,
-              help='Patterns to have in filename. If not None, only files with these patterns will be processed')
+@click.option('--percentiles', type=str, default='0.1 99.9',
+              callback=split_ws(item_type=float, expected_count=2),
+              help='Normalization percentiles low high, e.g. --percentiles "0.1 99.9"')
+@click.option('--pattern2ignore', type=str, default=None, callback=split_ws(item_type=str),
+              help='Substring(s) to ignore in filename(s), e.g. --pattern2ignore "junk tmp"')
+@click.option('--patterns2have', type=str, default=None, callback=split_ws(item_type=str),
+              help=('Only process filenames containing one of these substrings(s), '
+                    'e.g. --patterns2have "GFP DAPI"'))
 @click.option('--field_idx', type=int, default=None,
               help='Index of field to plot (default: None)')
-@click.option('--output_type', type=str, multiple=True, default=('channels', 'composite'),
-              help='Type of output to save (default: (channels, composite))')
-def create_channel_plots_cli(input_path, output_path, img_type, channels2use, suffix, 
-                             normalize, ref_wells, filename_well_idx, filename_field_idx, 
-                             flat_field_path, percentiles, pattern2ignore, patterns2have, 
-                             field_idx, output_type):
+@click.option('--output_type', type=str, default='channels composite',
+              callback=split_ws(item_type=str),
+              help='Outputs to save, e.g. --output_type "channels composite"')
+@click.option('--colors', type=str, default=None, callback=split_ws(item_type=str),
+              help=('Colors to use for each channel in the composite image, '
+                    'e.g. --colors "cyan green magenta". If omitted, defaults of '
+                    'create_composite are used.'))
+def create_channel_plots_cli(input_path, output_path, img_type, channels2use, suffix,
+                             normalize, ref_wells, filename_well_idx, filename_field_idx,
+                             flat_field_path, percentiles, pattern2ignore, patterns2have,
+                             field_idx, output_type, colors):
     """Main function that processes command line arguments and calls create_channel_plots."""
 
     if ref_wells is not None:
-        if isinstance(ref_wells, str):
-            ref_wells = (ref_wells,)
-        else:
-            ref_wells = tuple(str(well) for well in ref_wells)
-
-    if pattern2ignore is not None:
-        if isinstance(pattern2ignore, str):
-            pattern2ignore = (pattern2ignore,)
-
-    if patterns2have is not None:
-        if isinstance(patterns2have, str):
-            patterns2have = (patterns2have,)
-    
-    if output_type is not None:
-        if isinstance(output_type, str):
-            output_type = (output_type,)
+        ref_wells = tuple(str(well) for well in ref_wells)
 
     # Call the function
     create_channel_plots(
@@ -113,8 +84,10 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
         pattern2ignore=pattern2ignore,
         patterns2have=patterns2have,
         field_idx=field_idx,
-        output_type=output_type
+        output_type=output_type,
+        colors=list(colors) if colors is not None else None,
     )
+
 
 @cli.command(name='grid-plot')
 @click.option( '-i', '--input_path', type=click.Path(exists=True), required=True,
@@ -125,58 +98,53 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help='Path to plate layout file')
 @click.option('--suffix', type=str, default='.nd2',
               help='Suffix of image files')
-@click.option('--filename_well_idx', type=int, multiple=True, default=(4,7), 
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the well name in the filename (default: (4,7))')
-@click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the field number in the filename (default: (17,21))')
-@click.option('--skip_wells', type=str, multiple=True, default=[],
-              help='List of wells to skip')
+@click.option('--filename_well_idx', type=str, default='4 7',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Well-name slice start/stop indices in filename, e.g. --filename_well_idx "4 7"')
+@click.option('--filename_field_idx', type=str, default='17 21',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Field slice start/stop indices in filename, e.g. --filename_field_idx "17 21"')
+@click.option('--skip_wells', type=str, default=None, callback=split_ws(item_type=str),
+              help='Wells to skip, e.g. --skip_wells "A01 H12"')
 @click.option('--img_type', type=click.Choice(['multichannel', 'grayscale', 'mask']), default='grayscale',
               help='Type of image to plot. Options: multichannel, grayscale, mask')
-@click.option('--channels2use', type=int, multiple=True, default=(0,),
-              help='Channels to use for making the plots')
-@click.option('--ref_wells', type=str, multiple=True, callback=empty_to_none,
-            help='Well(s) to use as reference for normalization using its percentiles')
+@click.option('--channels2use', type=str, default='0', callback=split_ws(item_type=int),
+              help='Channel indices for plots, e.g. --channels2use "0 1 2"')
+@click.option('--ref_wells', type=str, default=None, callback=split_ws(item_type=str),
+              help='Reference wells for normalization percentiles, e.g. --ref_wells "A01 A02"')
 @click.option('--masks', is_flag=True,
               help='Indicate that image is a mask. FF correction will not be applied')
 @click.option('--flat_field_path', type=click.Path(), default=None,
               help='Path to image to use as flat field correction')
 @click.option('--cmap', type=str, default='cet_glasbey',
               help='Color map to use image borders in grid plot')
-@click.option('--condition_vars', type=str, multiple=True, default=('Treat', 'Dose'),
-              help='Variables to use for color encoding')
-@click.option('--conditions2remove', type=str, multiple=True, callback=empty_to_none,
-              help='List of condition combinations to remove from the palette, e.g. --conditions2remove "DMSO,L"')
+@click.option('--condition_vars', type=str, default='Treat Dose', callback=split_ws(item_type=str),
+              help='Variables for palette conditions, e.g. --condition_vars "Treat Dose"')
+@click.option('--conditions2remove', type=str, default=None, callback=split_ws(item_type=str),
+              help=('Condition tuples to drop from palette; each token is comma-joined vars, '
+                    'e.g. --conditions2remove "DMSO,L OtherTreat,H"'))
 @click.option('--check_batches', is_flag=True,
               help='Check if input_path contains subdirectories')
-@click.option('--field_idx', type=int, multiple=True, callback=empty_to_none,
-              help=('Index of the field to plot for each well. '
-                    'Pass once to use the same field for every well, or pass n_rows * n_cols times '
-                    'to set a specific field per grid position. '
-                    'If omitted, a random field will be selected per well.'))
+@click.option('--field_idx', type=str, default=None, callback=split_ws(item_type=int),
+              help=('Field index(es) per layout: one int for all wells, or one per grid cell, '
+                    'e.g. --field_idx "3" or --field_idx "0 1 2 3". If omitted, random field per well.'))
 @click.option('--plate_id', type=str, default=None,
               help=('Plate ID to use. Overwrites plate_layout automatically found plate ID to use. '
                     'This is useful if the plate ID is not in the filename.'))
 @click.option('--rep_id', type=str, default=None,
               help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. '
                     'This is useful if the rep ID is not in the filename.'))
-def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx, 
-                         filename_field_idx, skip_wells, img_type, channels2use, ref_wells, 
-                         masks, flat_field_path, cmap, condition_vars, conditions2remove, 
+def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx,
+                         filename_field_idx, skip_wells, img_type, channels2use, ref_wells,
+                         masks, flat_field_path, cmap, condition_vars, conditions2remove,
                          check_batches, field_idx, plate_id, rep_id):
     """Main function that processes command line arguments and calls create_grid_plot."""
     input_path = Path(input_path)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    if isinstance(skip_wells, str):
-        skip_wells = [skip_wells]
+    skip_wells = skip_wells if skip_wells is not None else ()
 
-    if isinstance(condition_vars, str):
-        condition_vars = [condition_vars]
-    
     if conditions2remove is not None:
         conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
 
@@ -185,7 +153,7 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
             assert idx >= 0, 'field_idx must be a non-negative integer'
 
     # Set color palette for treatments
-    plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python'); 
+    plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python')
     plate_layout.columns = [col.capitalize() for col in plate_layout.columns]
     plate_layout['Plate'] = plate_layout['Plate'].astype(str)
     plate_layout['Well'] = plate_layout['Well'].astype(str)
@@ -205,7 +173,7 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
         flat_field_files = get_flat_field_files(flat_field_path)
     else:
         flat_field_files = None
-    
+
     # Image path
     input_path = Path(input_path)
     df_images = get_df_images(
@@ -268,26 +236,28 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
               help='Path to plate layout file')
 @click.option('--suffix', type=str, default='.tif',
               help='Suffix of image files')
-@click.option('--filename_well_idx', type=int, multiple=True, default=(4,7), 
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the well name in the filename (default: (4,7))')
-@click.option('--filename_field_idx', type=int, multiple=True, default=(17,21),
-              callback=partial(validate_max_items, count=2),
-              help='Start and stop indices of the field number in the filename (default: (17,21))')
-@click.option('--skip_wells', type=str, multiple=True, default=[],
-              help='List of wells to skip')
+@click.option('--filename_well_idx', type=str, default='4 7',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Well-name slice start/stop indices in filename, e.g. --filename_well_idx "4 7"')
+@click.option('--filename_field_idx', type=str, default='17 21',
+              callback=split_ws(item_type=int, expected_count=2),
+              help='Field slice start/stop indices in filename, e.g. --filename_field_idx "17 21"')
+@click.option('--skip_wells', type=str, default=None, callback=split_ws(item_type=str),
+              help='Wells to skip, e.g. --skip_wells "A01 H12"')
 @click.option('--cmap', type=str, default='cet_glasbey',
               help='Color map to use for boxplots')
-@click.option('--condition_vars', type=str, multiple=True, default=('Treat', 'Dose'),
-              help='Variables to use for color encoding')
-@click.option('--conditions2remove', type=str, multiple=True, callback=empty_to_none,
-              help='List of condition combinations to remove from the palette, e.g. --conditions2remove "DMSO,L"')
+@click.option('--condition_vars', type=str, default='Treat Dose', callback=split_ws(item_type=str),
+              help='Variables for palette conditions, e.g. --condition_vars "Treat Dose"')
+@click.option('--conditions2remove', type=str, default=None, callback=split_ws(item_type=str),
+              help=('Condition tuples to drop from palette; each token is comma-joined vars, '
+                    'e.g. --conditions2remove "DMSO,L OtherTreat,H"'))
 @click.option('--check_batches', is_flag=True,
               help='Check if input_path contains subdirectories')
 @click.option('--y_label', type=str, default='Object Count',
               help='Label for y-axis')
-@click.option('--y_lim', type=float, multiple=True, callback=empty_to_none,
-              help='Limits for y-axis (min, max)')
+@click.option('--y_lim', type=str, default=None,
+              callback=split_ws(item_type=float, expected_count=2),
+              help='Y-axis limits min max, e.g. --y_lim "0 1000"')
 @click.option('--box_width', type=float, default=0.8,
               help='Width of the boxes in the boxplot')
 @click.option('--jitter', is_flag=True,
@@ -306,9 +276,9 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
 @click.option('--rep_id', type=str, default=None,
               help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. '
                     'This is useful if the rep ID is not in the filename.'))
-def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx, 
-                         filename_field_idx, skip_wells, cmap, condition_vars, conditions2remove, 
-                         check_batches, y_label, y_lim, box_width, jitter, plot_type, output_format, 
+def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx,
+                         filename_field_idx, skip_wells, cmap, condition_vars, conditions2remove,
+                         check_batches, y_label, y_lim, box_width, jitter, plot_type, output_format,
                          dpi, save_csv, plate_id, rep_id):
     """Main function that processes command line arguments and calls create_count_plot."""
 
@@ -316,17 +286,13 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    if isinstance(skip_wells, str):
-        skip_wells = [skip_wells]
+    skip_wells = skip_wells if skip_wells is not None else ()
 
-    if isinstance(condition_vars, str):
-        condition_vars = [condition_vars]
-    
     if conditions2remove is not None:
         conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
 
     # Set color palette for treatments
-    plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python'); 
+    plate_layout = pd.read_csv(plate_layout, sep=",|;", engine='python')
     plate_layout.columns = [col.capitalize() for col in plate_layout.columns]
     plate_layout['Plate'] = plate_layout['Plate'].astype(str)
     plate_layout['Well'] = plate_layout['Well'].astype(str)
@@ -340,7 +306,7 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
         cmap=cmap,
         conditions2remove=conditions2remove,
     )
-    
+
     # Image path
     input_path = Path(input_path)
     df_images = get_df_images(
@@ -362,14 +328,14 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
 
     # Merge plate layout with df_images
     df_images = link_df2plate_layout(df_images, plate_layout)
-    
+
     # Count objects in masks
     df_counts = create_count_df(df_images)
-    
+
     # For each directory, create a count boxplot
     for dir in tqdm(sorted(df_counts['Dir'].unique()), desc="Creating plots"):
         df_dir = df_counts[df_counts['Dir'] == dir]
-        
+
         # Create boxplot
         fig = create_count_plot(
             df_dir,
@@ -382,7 +348,7 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
             jitter=jitter,
             plot_type=plot_type
         )
-        
+
         # Save figure
         filename = output_path.joinpath(f'{dir}_count_plot.{output_format}')
         fig.savefig(
@@ -392,7 +358,7 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
             )
         plt.close(fig)
         print(f'Saved count plot to {filename}')
-        
+
         # Save counts to CSV
         if save_csv:
             csv_filename = output_path.joinpath(f'{dir}_counts.csv')
