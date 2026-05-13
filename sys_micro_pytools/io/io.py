@@ -1,4 +1,6 @@
 from pathlib import Path
+import shutil
+import subprocess
 from nd2reader import ND2Reader
 import tifffile
 from bioio import BioImage
@@ -73,3 +75,89 @@ def split_lif(
         
         # Write the image data to a compressed .tif file
         tifffile.imwrite(output_path, data, compression=compression, imagej=True)
+
+
+def _discover_bioformats_series(
+    lif_path: Path,
+    showinf_bin: str = "showinf",
+) -> list[int]:
+    if shutil.which(showinf_bin) is None:
+        raise RuntimeError(
+            f"'{showinf_bin}' was not found on PATH. Install Bio-Formats tools, "
+            "or pass --series explicitly."
+        )
+
+    cmd = [showinf_bin, "-nopix", str(lif_path)]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"Failed to list series via showinf: {stderr}")
+
+    series: list[int] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        # Typical line starts with "Series #0"
+        if line.startswith("Series #"):
+            token = line.split("Series #", 1)[1].split()[0]
+            token = token.rstrip(":")
+            if token.isdigit():
+                series.append(int(token))
+
+    if not series:
+        raise RuntimeError(
+            "Could not detect series in showinf output. "
+            "Please pass --series explicitly."
+        )
+
+    return sorted(set(series))
+
+
+def split_lif_bioformats(
+    lif_path: str | Path,
+    output_dir: str | Path,
+    compression: str = "LZW",
+    do_create_subdir: bool = True,
+    series: list[int] | None = None,
+    bfconvert_bin: str = "bfconvert",
+    showinf_bin: str = "showinf",
+) -> None:
+    """
+    Split .lif file into per-series OME-TIFF files using Bio-Formats tools.
+
+    This path is useful for Leica datasets where readlif/bioio_lif do not expose
+    dimensions (for example mirror/time planes) the same way as Fiji.
+    """
+    lif_path = Path(lif_path)
+    output_dir = Path(output_dir)
+
+    if shutil.which(bfconvert_bin) is None:
+        raise RuntimeError(
+            f"'{bfconvert_bin}' was not found on PATH. Install Bio-Formats tools first."
+        )
+
+    if do_create_subdir:
+        output_dir = output_dir / lif_path.stem
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if series is None:
+        series = _discover_bioformats_series(lif_path, showinf_bin=showinf_bin)
+
+    for s in tqdm(series, desc=f"Bio-Formats split {lif_path.name}"):
+        out_name = f"{lif_path.stem}_series_{s:03d}.ome.tif"
+        out_path = output_dir / out_name
+        cmd = [
+            bfconvert_bin,
+            "-overwrite",
+            "-series",
+            str(s),
+            "-compression",
+            compression,
+            str(lif_path),
+            str(out_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise RuntimeError(
+                f"bfconvert failed for series {s}.\nCommand: {' '.join(cmd)}\n{stderr}"
+            )
