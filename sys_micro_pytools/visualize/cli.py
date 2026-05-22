@@ -30,8 +30,10 @@ def cli():
               help='Channel indices for plots, e.g. --channels2use "0 1 2"')
 @click.option('--suffix', type=str, default='.nd2',
               help='Suffix of image files')
-@click.option('--normalize', is_flag=True,
-              help='Normalize the images')
+@click.option('--normalize_mode', type=click.Choice(['off', 'per_image', 'ref_wells', 'global']),
+              default='per_image',
+              help=('Intensity scaling: off, per_image, ref_wells (needs --ref_wells), '
+                    'or global. Multichannel composites always use global.'))
 @click.option('--ref_wells', type=str, default=None, callback=split_ws(item_type=str),
               help='Reference wells for normalization percentiles, e.g. --ref_wells "A01 A02"')
 @click.option('--filename_well_idx', type=str, default='4 7',
@@ -60,7 +62,7 @@ def cli():
                     'e.g. --colors "cyan green magenta". If omitted, defaults of '
                     'create_composite are used.'))
 def create_channel_plots_cli(input_path, output_path, img_type, channels2use, suffix,
-                             normalize, ref_wells, filename_well_idx, filename_field_idx,
+                             normalize_mode, ref_wells, filename_well_idx, filename_field_idx,
                              flat_field_path, percentiles, pattern2ignore, patterns2have,
                              field_idx, output_type, colors):
     """Main function that processes command line arguments and calls create_channel_plots."""
@@ -75,7 +77,7 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
         img_type=img_type,
         channels2use=channels2use,
         suffix=suffix,
-        normalize=normalize,
+        normalize_mode=normalize_mode,
         ref_wells=ref_wells,
         filename_well_idx=filename_well_idx,
         filename_field_idx=filename_field_idx,
@@ -110,8 +112,15 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help='Type of image to plot. Options: multichannel, grayscale, mask')
 @click.option('--channels2use', type=str, default='0', callback=split_ws(item_type=int),
               help='Channel indices for plots, e.g. --channels2use "0 1 2"')
+@click.option('--normalize_mode', type=click.Choice(['off', 'per_image', 'ref_wells', 'global']),
+              default='per_image',
+              help=('Intensity scaling: off, per_image, ref_wells (needs --ref_wells), '
+                    'or global. Multichannel grids always use global.'))
 @click.option('--ref_wells', type=str, default=None, callback=split_ws(item_type=str),
               help='Reference wells for normalization percentiles, e.g. --ref_wells "A01 A02"')
+@click.option('--percentiles', type=str, default='0.1 99.9',
+              callback=split_ws(item_type=float, expected_count=2),
+              help='Normalization percentiles low high, e.g. --percentiles "0.1 99.9"')
 @click.option('--masks', is_flag=True,
               help='Indicate that image is a mask. FF correction will not be applied')
 @click.option('--flat_field_path', type=click.Path(), default=None,
@@ -135,15 +144,19 @@ def create_channel_plots_cli(input_path, output_path, img_type, channels2use, su
               help=('Rep ID to use. Overwrites plate_layout automatically found rep ID to use. '
                     'This is useful if the rep ID is not in the filename.'))
 def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename_well_idx,
-                         filename_field_idx, skip_wells, img_type, channels2use, ref_wells,
-                         masks, flat_field_path, cmap, condition_vars, conditions2remove,
-                         check_batches, field_idx, plate_id, rep_id):
+                         filename_field_idx, skip_wells, img_type, channels2use, normalize_mode,
+                         ref_wells, percentiles, masks, flat_field_path, cmap, condition_vars,
+                         conditions2remove, check_batches, field_idx, plate_id, rep_id):
     """Main function that processes command line arguments and calls create_grid_plot."""
     input_path = Path(input_path)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
     skip_wells = skip_wells if skip_wells is not None else ()
+    if masks:
+        img_type = 'mask'
+    if ref_wells is not None:
+        ref_wells = list(ref_wells)
 
     if conditions2remove is not None:
         conditions2remove = [tuple(condition.split(',')) for condition in conditions2remove]
@@ -216,6 +229,9 @@ def create_grid_plot_cli(input_path, output_path, plate_layout, suffix, filename
             img_type=img_type,
             channels2use=channels2use,
             ref_wells=ref_wells,
+            normalize_mode=normalize_mode,
+            pmin=percentiles[0],
+            pmax=percentiles[1],
             title=dir
         )
 

@@ -1,10 +1,40 @@
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Sequence, Optional, Literal
+import warnings
 import numpy as np
 import pandas as pd
 from numbers import Number
 
 from sys_micro_pytools.io import read_tiff_or_nd2
 from sys_micro_pytools.preprocess.flat_field import flat_field_correction
+
+NormalizeMode = Literal['off', 'per_image', 'ref_wells', 'global']
+NORMALIZE_MODES: Tuple[str, ...] = ('off', 'per_image', 'ref_wells', 'global')
+
+
+def coerce_channels(channels: Union[int, Sequence[int], None]) -> List[int]:
+    if channels is None:
+        return [0]
+    if isinstance(channels, int):
+        return [channels]
+    return list(channels)
+
+
+def select_channel_plane(img: np.ndarray, channel: int) -> np.ndarray:
+    '''Extract one channel as a 2D plane from yx or cyx data.'''
+    if img.ndim == 2:
+        if channel != 0:
+            raise ValueError(
+                f'Image has no channel axis (shape {img.shape}); '
+                f'cannot select channel {channel}'
+            )
+        return img
+    if img.ndim == 3:
+        if channel < 0 or channel >= img.shape[0]:
+            raise IndexError(
+                f'Channel index {channel} out of range for shape {img.shape}'
+            )
+        return img[channel, :, :]
+    raise ValueError(f'Expected 2D or 3D (cyx) image, got shape {img.shape}')
 
 def normalize_img(img: np.ndarray, pmin: float=0.1, pmax: float=99.9,
                   pmin_val: float=None, pmax_val: float=None,
@@ -140,35 +170,153 @@ def standardize_per_channel(img: np.ndarray,
 
 
 
-def get_ref_wells_percentiles(df: pd.DataFrame, ref_wells: List[str], 
-                                 n_channels: int, flat_field: np.ndarray, 
-                                 pmin: float=0.1, pmax: float=99.9,
-                                 path_col: str='file', well_col: str='well'):
+def _ref_wells_provided(ref_wells: Optional[Sequence[str]]) -> bool:
+    if not ref_wells:
+        return False
+    if isinstance(ref_wells, str):
+        return bool(ref_wells.strip())
+    return len(ref_wells) > 0
+
+
+def resolve_normalize_mode(
+        normalize_mode: str,
+        img_type: str,
+        ref_wells: Optional[Sequence[str]] = None,
+    ) -> NormalizeMode:
+    '''Validate ``normalize_mode`` and apply img-type defaults.'''
+    if normalize_mode not in NORMALIZE_MODES:
+        raise ValueError(
+            f'normalize_mode must be one of {NORMALIZE_MODES}, got {normalize_mode!r}'
+        )
+    if normalize_mode == 'ref_wells' and not _ref_wells_provided(ref_wells):
+        raise ValueError('ref_wells is required when normalize_mode is ref_wells')
+    if _ref_wells_provided(ref_wells) and normalize_mode != 'ref_wells':
+        if img_type == 'multichannel':
+            warnings.warn(
+                'ref_wells is ignored for multichannel plots; '
+                'global normalization is used instead',
+                stacklevel=2,
+            )
+        elif img_type == 'mask':
+            warnings.warn(
+                'ref_wells is ignored for mask plots',
+                stacklevel=2,
+            )
+        else:
+            warnings.warn(
+                f'ref_wells is ignored when normalize_mode is {normalize_mode!r}; '
+                'use normalize_mode=ref_wells to apply reference-well bounds',
+                stacklevel=2,
+            )
+    if img_type == 'multichannel' and normalize_mode != 'global':
+        warnings.warn(
+            f'multichannel plots use global normalization; overriding '
+            f'{normalize_mode!r} with global',
+            stacklevel=2,
+        )
+        return 'global'
+    if img_type == 'mask':
+        return 'off'
+    return normalize_mode
+
+
+def grayscale_display_limits(
+        normalize_mode: NormalizeMode,
+        global_pmin: np.ndarray,
+        global_pmax: np.ndarray,
+        channel_idx: int = 0,
+    ) -> Tuple[float, float]:
+    if normalize_mode == 'off':
+        return float(global_pmin[channel_idx]), float(global_pmax[channel_idx])
+    return 0.0, 1.0
+
+
+def _accumulate_percentiles_from_df(
+        df: pd.DataFrame,
+        channels: List[int],
+        flat_field: Optional[np.ndarray],
+        pmin: float,
+        pmax: float,
+        path_col: str,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+    n_channels = len(channels)
+    pmin_vals = np.zeros((n_channels,))
+    pmax_vals = np.zeros((n_channels,))
+    count = 0
+    for _, row in df.iterrows():
+        file = str(row[path_col])
+        ref_img = read_tiff_or_nd2(file, bundle_axes='cyx').astype(float)
+        if flat_field is not None:
+            ref_img = flat_field_correction(ref_img, flat_field)
+        for i, ch in enumerate(channels):
+            plane = select_channel_plane(ref_img, ch)
+            pmin_vals[i] += np.percentile(plane, pmin)
+            pmax_vals[i] += np.percentile(plane, pmax)
+        count += 1
+    if count == 0:
+        raise ValueError('No images found to compute percentiles')
+    pmin_vals /= count
+    pmax_vals /= count
+    return pmin_vals, pmax_vals
+
+
+def get_dataset_percentiles(
+        df: pd.DataFrame,
+        channels: Union[int, Sequence[int]],
+        flat_field: Optional[np.ndarray],
+        pmin: float = 0.1,
+        pmax: float = 99.9,
+        path_col: str = 'file',
+    ) -> Tuple[np.ndarray, np.ndarray]:
+    '''Mean per-image percentiles across all rows in ``df`` (global bounds).'''
+    if path_col not in df.columns:
+        raise ValueError(f'{path_col} not in df columns')
+    channels = coerce_channels(channels)
+    return _accumulate_percentiles_from_df(
+        df, channels, flat_field, pmin, pmax, path_col
+    )
+
+
+def get_ref_wells_percentiles(
+        df: pd.DataFrame,
+        ref_wells: List[str],
+        channels: Union[int, Sequence[int]],
+        flat_field: Optional[np.ndarray],
+        pmin: float = 0.1,
+        pmax: float = 99.9,
+        path_col: str = 'file',
+        well_col: str = 'well',
+    ) -> Tuple[np.ndarray, np.ndarray]:
+    '''Percentile bounds from reference wells, per entry in ``channels``.'''
     if path_col not in df.columns:
         raise ValueError(f'{path_col} not in df columns')
     if well_col not in df.columns:
         raise ValueError(f'{well_col} not in df columns')
-    
+
+    channels = coerce_channels(channels)
     df_ref = df[df[well_col].isin(ref_wells)]
-
     if len(df_ref) == 0:
-        raise ValueError(f'No reference wells found in DataFrame')
+        raise ValueError('No reference wells found in DataFrame')
+    return _accumulate_percentiles_from_df(
+        df_ref, channels, flat_field, pmin, pmax, path_col
+    )
 
-    pmin_vals = np.zeros((n_channels,))
-    pmax_vals = np.zeros((n_channels,))
-    
-    count = 0
-    for _, row in df_ref.iterrows():
-        file = str(row[path_col])
-        ref_img = read_tiff_or_nd2(file, bundle_axes='yx' if n_channels == 1 else 'cyx').astype(float)
-        if flat_field is not None:
-            ref_img = flat_field_correction(ref_img, flat_field)
-        if ref_img.ndim == 2:
-            ref_img = np.expand_dims(ref_img, axis=0)
-        for C in range(n_channels):
-            pmin_vals[C] += np.percentile(ref_img[C,:,:], pmin)
-            pmax_vals[C] += np.percentile(ref_img[C,:,:], pmax)
-        count += 1
-    pmin_vals /= count
-    pmax_vals /= count
-    return pmin_vals, pmax_vals
+
+def normalize_grayscale_plane(
+        img: np.ndarray,
+        normalize_mode: NormalizeMode,
+        pmin: float,
+        pmax: float,
+        bounds_pmin: Optional[float] = None,
+        bounds_pmax: Optional[float] = None,
+) -> np.ndarray:
+    if normalize_mode == 'off':
+        return img
+    if normalize_mode == 'per_image':
+        return normalize_img(img, pmin=pmin, pmax=pmax, clip=True)
+    return normalize_img(
+        img,
+        pmin_val=bounds_pmin,
+        pmax_val=bounds_pmax,
+        clip=True,
+    )

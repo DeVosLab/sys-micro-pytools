@@ -10,7 +10,16 @@ import colorcet as cc
 from matplotlib import pyplot as plt
 
 from sys_micro_pytools.io import read_tiff_or_nd2
-from sys_micro_pytools.preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
+from sys_micro_pytools.preprocess.normalize import (
+    coerce_channels,
+    normalize_per_channel,
+    get_ref_wells_percentiles,
+    get_dataset_percentiles,
+    select_channel_plane,
+    resolve_normalize_mode,
+    grayscale_display_limits,
+    normalize_grayscale_plane,
+)
 from sys_micro_pytools.preprocess.flat_field import flat_field_correction
 from sys_micro_pytools.preprocess.composite import create_composite
 from sys_micro_pytools.visualize.visualize import _format_condition
@@ -103,9 +112,21 @@ def create_grid_plot(
         img_type: Literal['multichannel', 'grayscale', 'mask']='multichannel',
         channels2use: Union[list, tuple, int]=None,
         ref_wells: Union[list, tuple, str]=None,
+        normalize_mode: str='per_image',
         pmin: float=0.1, pmax: float=99.9,
         title: str=None,
     ):
+    channels2use = coerce_channels(channels2use)
+    if img_type == 'grayscale' and len(channels2use) != 1:
+        raise ValueError(
+            'grayscale img_type requires exactly one channel in channels2use, '
+            f'got {channels2use}'
+        )
+
+    if ref_wells is not None and not isinstance(ref_wells, (list, tuple)):
+        ref_wells = [ref_wells]
+    normalize_mode = resolve_normalize_mode(normalize_mode, img_type, ref_wells)
+
     rows = sorted(df['Row'].unique())
     cols = sorted(df['Col'].unique())
     n_rows = len(rows)
@@ -121,17 +142,33 @@ def create_grid_plot(
                 assert len(field_idx) == n_rows * n_cols, \
                     'field_idx must be a single integer or a list/tuple of length n_rows * n_cols'
 
-    if ref_wells is not None:
-        pmin_vals, pmax_vals = get_ref_wells_percentiles(
-            df, ref_wells=ref_wells, 
-            n_channels=len(channels2use), 
-            flat_field=flat_field, 
-            pmin=pmin, pmax=pmax,
-            path_col='Filename', well_col='Well'
-        )
+    if img_type == 'mask':
+        global_pmin, global_pmax = None, None
+        norm_pmin, norm_pmax = None, None
     else:
-        pmin_vals = None
-        pmax_vals = None
+        global_pmin, global_pmax = get_dataset_percentiles(
+            df,
+            channels=channels2use,
+            flat_field=flat_field,
+            pmin=pmin,
+            pmax=pmax,
+            path_col='Filename',
+        )
+        if normalize_mode == 'ref_wells':
+            norm_pmin, norm_pmax = get_ref_wells_percentiles(
+                df,
+                ref_wells=list(ref_wells),
+                channels=channels2use,
+                flat_field=flat_field,
+                pmin=pmin,
+                pmax=pmax,
+                path_col='Filename',
+                well_col='Well',
+            )
+        elif normalize_mode == 'global':
+            norm_pmin, norm_pmax = global_pmin, global_pmax
+        else:
+            norm_pmin, norm_pmax = None, None
 
     # Estimate legend width (in inches) from the longest label / title so it
     # fits inside the figure even without bbox_inches='tight' when saving.
@@ -198,9 +235,9 @@ def create_grid_plot(
             else:
                 # Load image
                 filename = df_row_col['Filename'].values[idx]
-                img = read_tiff_or_nd2(str(filename), bundle_axes='cyx' if \
-                                      img_type == 'multichannel' else 'yx').astype(float)
-            
+                bundle_axes = 'cyx' if img_type in ('multichannel', 'grayscale') else 'yx'
+                img = read_tiff_or_nd2(str(filename), bundle_axes=bundle_axes).astype(float)
+
             if flat_field is not None and img_type != 'mask':
                 img = flat_field_correction(img, flat_field)
 
@@ -209,41 +246,55 @@ def create_grid_plot(
             order = 1
             if img_type == 'mask':
                 order = 0
+            elif img_type == 'grayscale':
+                img = select_channel_plane(img, channels2use[0])
             elif img_type == 'multichannel':
-                n_channels = len(channels2use)
-                img = img[channels2use,:,:]
-                shape = (n_channels,) + shape
+                img = np.take(img, channels2use, axis=0)
+                shape = (len(channels2use),) + shape
             img = resize(img, shape, order=order, anti_aliasing=True)
 
             # Normalize image
             if img_type == 'grayscale':
-                img = normalize_img(
-                    img, pmin=pmin, pmax=pmax,
-                    pmin_val=pmin_vals, pmax_val=pmax_vals,
-                    clip=True,
+                bounds_lo = norm_pmin[0] if norm_pmin is not None else None
+                bounds_hi = norm_pmax[0] if norm_pmax is not None else None
+                img = normalize_grayscale_plane(
+                    img,
+                    normalize_mode,
+                    pmin=pmin,
+                    pmax=pmax,
+                    bounds_pmin=bounds_lo,
+                    bounds_pmax=bounds_hi,
+                )
+                vmin, vmax = grayscale_display_limits(
+                    normalize_mode, global_pmin, global_pmax, channel_idx=0
                 )
             elif img_type == 'multichannel':
-                if channels2use is not None:
-                    img = img[channels2use,:,:]
                 if img.ndim == 2:
                     img = np.expand_dims(img, axis=0)
                 img = normalize_per_channel(
-                    img, pmin=pmin, pmax=pmax,
-                    pmin_vals=pmin_vals, pmax_vals=pmax_vals,
+                    img,
+                    pmin_vals=global_pmin,
+                    pmax_vals=global_pmax,
                     clip=True,
                 )
                 img = create_composite(img, channel_dim=0)
                 img = np.moveaxis(img, 0, -1)
+                vmin, vmax = 0, 1
             elif img_type == 'mask':
-                pass
+                vmin, vmax = None, None
             else:
                 raise ValueError(f'img_type {img_type} is not supported')
-            
+
             # Label to rgb
             if img_type == 'mask':
                 img = label2rgb(img, bg_label=0, bg_color=(0, 0, 0))
 
-            axes[r, c].imshow(img)
+            if img_type == 'grayscale':
+                axes[r, c].imshow(img, cmap='gray', vmin=vmin, vmax=vmax)
+            elif img_type == 'multichannel':
+                axes[r, c].imshow(img, vmin=vmin, vmax=vmax)
+            else:
+                axes[r, c].imshow(img)
             axes[r, c].patch.set_edgecolor(condition_color)
             axes[r, c].patch.set_linewidth(10)
 

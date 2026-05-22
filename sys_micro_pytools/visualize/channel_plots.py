@@ -9,7 +9,17 @@ from typing import Union, List, Tuple, Optional
 
 from sys_micro_pytools.io import read_tiff_or_nd2
 from sys_micro_pytools.preprocess.flat_field import flat_field_correction
-from sys_micro_pytools.preprocess.normalize import normalize_img, normalize_per_channel, get_ref_wells_percentiles
+from sys_micro_pytools.preprocess.normalize import (
+    coerce_channels,
+    normalize_img,
+    normalize_per_channel,
+    get_ref_wells_percentiles,
+    get_dataset_percentiles,
+    select_channel_plane,
+    resolve_normalize_mode,
+    grayscale_display_limits,
+    normalize_grayscale_plane,
+)
 from sys_micro_pytools.preprocess.composite import create_composite
 
 
@@ -19,7 +29,7 @@ def create_channel_plots(
     img_type: str = 'multichannel',
     channels2use: Union[List[int], int] = 0,
     suffix: str = '.nd2',
-    normalize: bool = False,
+    normalize_mode: str = 'per_image',
     ref_wells: Optional[List[str]] = None,
     filename_well_idx: Tuple[int, int] = (4, 7),
     filename_field_idx: Tuple[int, int] = (17, 21),
@@ -39,7 +49,7 @@ def create_channel_plots(
         img_type: Type of image to plot ('multichannel' or 'grayscale')
         channels2use: Channels to use for making the plots
         suffix: Suffix of image files
-        normalize: Whether to store normalized channel images
+        normalize_mode: Normalization strategy (off, per_image, ref_wells, global)
         ref_wells: Well(s) to use as reference for normalization
         filename_well_idx: Start and stop indices of well name in filename
         filename_field_idx: Start and stop indices of field number in filename
@@ -79,6 +89,13 @@ def create_channel_plots(
     else:
         flat_field = None
     
+    channels2use = coerce_channels(channels2use)
+    if img_type == 'grayscale' and len(channels2use) != 1:
+        raise ValueError(
+            'grayscale img_type requires exactly one channel in channels2use, '
+            f'got {channels2use}'
+        )
+
     # Loop over files and save plots
     files = sorted([f for f in input_path.iterdir() if f.suffix == suffix and not f.name.startswith('.')])
     wells = [f.stem[filename_well_idx[0]:filename_well_idx[1]] for f in files]
@@ -92,13 +109,31 @@ def create_channel_plots(
         wells = [wells[i] for i in idx]
         fields = [fields[i] for i in idx]
     
-    if ref_wells is not None:
-        pmin_vals, pmax_vals = get_ref_wells_percentiles(
-            df, ref_wells=ref_wells, 
-            n_channels=len(channels2use), 
-            flat_field=flat_field, 
-            pmin=percentiles[0], pmax=percentiles[1]
-            )
+    normalize_mode = resolve_normalize_mode(normalize_mode, img_type, ref_wells)
+
+    global_pmin, global_pmax = get_dataset_percentiles(
+        df,
+        channels=channels2use,
+        flat_field=flat_field,
+        pmin=percentiles[0],
+        pmax=percentiles[1],
+        path_col='file',
+    )
+    if normalize_mode == 'ref_wells':
+        norm_pmin, norm_pmax = get_ref_wells_percentiles(
+            df,
+            ref_wells=list(ref_wells),
+            channels=channels2use,
+            flat_field=flat_field,
+            pmin=percentiles[0],
+            pmax=percentiles[1],
+            path_col='file',
+            well_col='well',
+        )
+    elif normalize_mode == 'global':
+        norm_pmin, norm_pmax = global_pmin, global_pmax
+    else:
+        norm_pmin, norm_pmax = None, None
 
     for file, well, field in tqdm(zip(files, wells, fields), total=len(files)):
         if pattern2ignore is not None and any([x in str(file.stem) for x in pattern2ignore]):
@@ -107,66 +142,99 @@ def create_channel_plots(
         if patterns2have is not None and not any([x in str(file.stem) for x in patterns2have]):
             continue
 
-        img = read_tiff_or_nd2(file, bundle_axes='cyx' if img_type == 'multichannel' else 'yx').astype(float)
-        
+        bundle_axes = 'cyx' if img_type in ('multichannel', 'grayscale') else 'yx'
+        img = read_tiff_or_nd2(file, bundle_axes=bundle_axes).astype(float)
+
         if flat_field is not None:
             img = flat_field_correction(img, flat_field)
 
         if img_type == 'grayscale':
+            img = select_channel_plane(img, channels2use[0])
+            bounds_lo = norm_pmin[0] if norm_pmin is not None else None
+            bounds_hi = norm_pmax[0] if norm_pmax is not None else None
+            channel_plane = normalize_grayscale_plane(
+                img,
+                normalize_mode,
+                pmin=percentiles[0],
+                pmax=percentiles[1],
+                bounds_pmin=bounds_lo,
+                bounds_pmax=bounds_hi,
+            )
+            vmin, vmax = grayscale_display_limits(
+                normalize_mode, global_pmin, global_pmax, channel_idx=0
+            )
             n_channels = 1
-            img_norm = normalize_img(
-                img, 
-                pmin=percentiles[0], pmax=percentiles[1],
-                pmin_val=pmin_vals[0] if ref_wells is not None else None, 
-                pmax_val=pmax_vals[0] if ref_wells is not None else None,
-                clip=True
-                )
-            img_composite = img_norm
+            channel_planes = [channel_plane]
+            channel_titles = [f'Channel {channels2use[0]}']
+            img_composite = channel_plane
         else:
-            print()
-            print(img.shape)
-            if channels2use is not None:
-                img = np.take(img, channels2use, axis=0)
+            img = np.take(img, channels2use, axis=0)
             if img.ndim == 2:
                 img = np.expand_dims(img, axis=0)
             n_channels = img.shape[0]
-            img_norm = img.copy()
-            img_norm = normalize_per_channel(
-                img,
-                pmin=percentiles[0], pmax=percentiles[1],
-                pmin_vals=pmin_vals if ref_wells is not None else None, 
-                pmax_vals=pmax_vals if ref_wells is not None else None,
-                clip=True
-                )
+            channel_planes = []
+            channel_titles = []
+            for C in range(n_channels):
+                bounds_lo = norm_pmin[C] if norm_pmin is not None else None
+                bounds_hi = norm_pmax[C] if norm_pmax is not None else None
+                if normalize_mode == 'off':
+                    plane = img[C, :, :]
+                elif normalize_mode == 'per_image':
+                    plane = normalize_img(
+                        img[C, :, :],
+                        pmin=percentiles[0],
+                        pmax=percentiles[1],
+                        clip=True,
+                    )
+                else:
+                    plane = normalize_img(
+                        img[C, :, :],
+                        pmin_val=bounds_lo,
+                        pmax_val=bounds_hi,
+                        clip=True,
+                    )
+                channel_planes.append(plane)
+                channel_titles.append(f'Channel {channels2use[C]}')
             composite_kwargs = {} if colors is None else {'colors': colors}
-            img_composite = create_composite(img_norm, channel_dim=0, **composite_kwargs)
-        
+            img_for_composite = normalize_per_channel(
+                img.copy(),
+                pmin_vals=global_pmin,
+                pmax_vals=global_pmax,
+                clip=True,
+            )
+            img_composite = create_composite(
+                img_for_composite, channel_dim=0, **composite_kwargs
+            )
+
         # Save channel plots
         if 'channels' in output_type:
             fig, axes = plt.subplots(1, n_channels, figsize=(4*n_channels, 5))
-            axes = [axes] if n_channels == 1 else axes # Make sure axes is a list
+            axes = [axes] if n_channels == 1 else axes
             for C in range(n_channels):
-                # Plot of all channels
-                axes[C].imshow(
-                    img_norm[C,:,:] if normalize else img[C,:,:],
-                    cmap='gray',
-                    vmin=0 if not normalize else None,
-                    vmax=1 if not normalize else None
+                if img_type == 'grayscale':
+                    vmin_c, vmax_c = vmin, vmax
+                else:
+                    vmin_c, vmax_c = grayscale_display_limits(
+                        normalize_mode, global_pmin, global_pmax, channel_idx=C
                     )
+                axes[C].imshow(
+                    channel_planes[C],
+                    cmap='gray',
+                    vmin=vmin_c,
+                    vmax=vmax_c,
+                )
                 axes[C].set_xticks([])
                 axes[C].set_yticks([])
-                axes[C].set_title(f'Channel {C}')
+                axes[C].set_title(channel_titles[C])
 
-
-                # Individual channel images
                 filename = Path(output_path_channels).joinpath(f'{file.stem}_ch{C:02d}.tif')
                 filename.parent.mkdir(exist_ok=True)
                 tifffile.imwrite(
                     str(filename),
-                    (img_norm[C,:,:] if normalize else img[C,:,:]).astype(np.float32),
+                    channel_planes[C].astype(np.float32),
                     imagej=True,
                     compression='zlib'
-                    )
+                )
             plt.suptitle(f'{well} {field}')
             plt.tight_layout()
             filename = Path(output_path_channels).joinpath(f'{file.stem}.jpg')
@@ -194,7 +262,7 @@ def main(**kwargs):
         img_type=kwargs['img_type'],
         channels2use=kwargs['channels2use'],
         suffix=kwargs['suffix'],
-        normalize=kwargs['normalize'],
+        normalize_mode=kwargs['normalize_mode'],
         ref_wells=kwargs['ref_wells'],
         filename_well_idx=kwargs['filename_well_idx'],
         filename_field_idx=kwargs['filename_field_idx'],
@@ -220,8 +288,17 @@ def parse_args():
         help='Channels to use for making the plots')
     parser.add_argument('--suffix', type=str, default='.nd2',
         help='Suffix of image files')
-    parser.add_argument('--normalize', action='store_true',
-        help='Store normalized channel images. Composite images are always normalized')
+    parser.add_argument(
+        '--normalize_mode',
+        type=str,
+        default='per_image',
+        choices=['off', 'per_image', 'ref_wells', 'global'],
+        help=(
+            'Normalization: off (raw + global display range), per_image, '
+            'ref_wells (requires --ref_wells), or global. '
+            'Composites always use global normalization.'
+        ),
+    )
     parser.add_argument('--ref_wells', type=str, nargs='+', default=None,
         help='Well(s) to use as reference for normalization using its percentiles')
     parser.add_argument('--filename_well_idx', nargs=2, type=int, default=[4,7],
