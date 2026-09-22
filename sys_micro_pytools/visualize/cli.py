@@ -12,6 +12,7 @@ from sys_micro_pytools.visualize import create_palette
 from sys_micro_pytools.visualize.channel_plots import create_channel_plots
 from sys_micro_pytools.visualize.grid_plots import get_df_images, create_grid_plot
 from sys_micro_pytools.visualize.count_plots import create_count_df, create_count_plot
+from sys_micro_pytools.visualize.orthogonal_plots import create_orthogonal_plots_batch
 
 
 @click.group()
@@ -380,6 +381,56 @@ def create_count_plot_cli(input_path, output_path, plate_layout, suffix, filenam
             csv_filename = output_path.joinpath(f'{dir}_counts.csv')
             df_dir.to_csv(csv_filename, index=False)
             print(f'Saved counts to {csv_filename}')
+
+
+@cli.command(name='orthogonal-plot')
+@click.option('-i', '--input_path', type=click.Path(exists=True), required=True,
+              help='Path to directory containing 3D images')
+@click.option('-o', '--output_path', type=click.Path(), required=True,
+              help='Path to directory where output will be saved')
+@click.option('--suffix', type=str, default='.tif',
+              help='Suffix of image files (default: .tif)')
+@click.option('--channel_dim', type=int, default=1,
+              help='Dimension index for channels (default: 1 for ZCYX). Use -1 for single-channel 3D images.')
+@click.option('--cmaps', type=str, multiple=True, callback=empty_to_none,
+              help='Colormaps for each channel (default: gray for all). Specify multiple times for each channel.')
+@click.option('--output_format', type=str, default='png',
+              help='Format for output figures (default: png)')
+@click.option('--dpi', type=int, default=150,
+              help='DPI for output figures (default: 150)')
+@click.option('--figsize_scale', type=float, default=3.0,
+              help='Scale factor for figure size (default: 3.0)')
+@click.option('--percentiles', type=float, multiple=True, default=(0.1, 99.9),
+              callback=partial(validate_max_items, count=2),
+              help='Percentiles (pmin, pmax) for image normalization (default: 0.1 99.9)')
+def create_orthogonal_plot_cli(input_path, output_path, suffix, channel_dim, cmaps, 
+                                output_format, dpi, figsize_scale, percentiles):
+    """Create orthogonal view plots (YX, YZ, XZ) through the middle of 3D multi-channel images.
+    
+    Processes all images with the specified suffix in input_path (including subdirectories),
+    preserves the subfolder structure in output_path, and saves plots with the same filename.
+    Default dimension order is ZCYX.
+    """
+    # Convert channel_dim=-1 to None for single-channel images
+    if channel_dim == -1:
+        channel_dim = None
+
+    # Convert cmaps tuple to list if provided
+    if cmaps is not None:
+        cmaps = list(cmaps)
+
+    create_orthogonal_plots_batch(
+        input_path=input_path,
+        output_path=output_path,
+        suffix=suffix,
+        channel_dim=channel_dim,
+        cmaps=cmaps,
+        output_format=output_format,
+        dpi=dpi,
+        figsize_scale=figsize_scale,
+        percentiles=percentiles
+    )
+
 
 if __name__ == '__main__':
     cli()

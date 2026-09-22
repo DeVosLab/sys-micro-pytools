@@ -7,6 +7,7 @@ from .grid_plots import (
 )
 
 from .channel_plots import create_channel_plots
+from .orthogonal_plots import create_orthogonal_plot, create_orthogonal_plots_batch
 
 def get_nice_ticks(data_min, data_max):
     """
@@ -57,5 +58,7 @@ __all__ = [
     'create_channel_plots',
     'create_grid_plot',
     'get_df_images',
-    'get_nice_ticks'
+    'get_nice_ticks',
+    'create_orthogonal_plot',
+    'create_orthogonal_plots_batch'
 ]
