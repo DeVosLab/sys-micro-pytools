@@ -1,6 +1,6 @@
 from pathlib import Path
 import re
-from typing import Union
+from typing import Sequence, Union
 
 import numpy as np
 import tifffile
@@ -61,12 +61,37 @@ def _resolve_bundle_axes(requested: str, available: dict) -> str:
     return resolved
 
 
+def _validate_channel_order(
+    channel_order: Sequence[int], axes: str, n_channels: int
+) -> tuple:
+    """Check that ``channel_order`` is a permutation of the available channels."""
+    order = tuple(int(c) for c in channel_order)
+
+    if 'c' not in axes:
+        raise ValueError(
+            f"channel_order was given but the resolved axes {axes!r} contain no "
+            "channel axis"
+        )
+    if len(order) != n_channels:
+        raise ValueError(
+            f"channel_order has {len(order)} entries but the file has "
+            f"{n_channels} channel(s)"
+        )
+    if sorted(order) != list(range(n_channels)):
+        raise ValueError(
+            f"channel_order must be a permutation of 0..{n_channels - 1}, "
+            f"got {order}"
+        )
+    return order
+
+
 def split_nd2(
     nd2_path: Union[str, Path],
     output_dir: Union[str, Path],
     bundle_axes: str = 'cyx',
     compression: str = 'zlib',
     overwrite: bool = False,
+    channel_order: Union[Sequence[int], None] = None,
 ) -> list:
     """Split a multi-FOV .nd2 file into one .tif per field of view (point).
 
@@ -91,6 +116,11 @@ def split_nd2(
     overwrite : bool
         If False (default), skip writing FOVs whose output file already
         exists.
+    channel_order : sequence of int, optional
+        New channel order, as a permutation of the original channel indices.
+        E.g. ``[4, 2, 0, 1, 3]`` writes the original channels 4, 2, 0, 1, 3
+        as the new channels 0, 1, 2, 3, 4. Requires a channel axis in
+        ``bundle_axes``.
 
     Returns
     -------
@@ -112,6 +142,13 @@ def split_nd2(
         resolved_axes = _resolve_bundle_axes(bundle_axes, images.sizes)
         images.bundle_axes = resolved_axes
 
+        channel_axis = None
+        if channel_order is not None:
+            channel_order = _validate_channel_order(
+                channel_order, resolved_axes, int(images.sizes.get('c', 1))
+            )
+            channel_axis = resolved_axes.index('c')
+
         # NOTE: We deliberately do NOT use ``images.iter_axes = 'v'`` here.
         # In nd2reader, combining iter_axes with bundle_axes can leave the
         # first iterated frame as all zeros, which manifests as FOV 0 of
@@ -132,6 +169,9 @@ def split_nd2(
                 images.default_coords['v'] = v
             frame = np.asarray(images[0])
 
+            if channel_order is not None:
+                frame = np.take(frame, channel_order, axis=channel_axis)
+
             tifffile.imwrite(
                 out_path,
                 frame.astype(np.uint16),
@@ -150,6 +190,7 @@ def split_nd2_folder(
     bundle_axes: str = 'cyx',
     compression: str = 'zlib',
     overwrite: bool = False,
+    channel_order: Union[Sequence[int], None] = None,
 ) -> None:
     """Split every .nd2 file in ``input_dir`` into per-FOV .tif files.
 
@@ -176,6 +217,7 @@ def split_nd2_folder(
                 bundle_axes=bundle_axes,
                 compression=compression,
                 overwrite=overwrite,
+                channel_order=channel_order,
             )
         except Exception as e:
             print(f"Error splitting {f.name}: {e}")

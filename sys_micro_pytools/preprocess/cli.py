@@ -73,7 +73,12 @@ def flat_field(input_path, output_path, suffix, sigma, n_images, from_well,
               help='Compression for the output .tif files (e.g. zlib, lzw).')
 @click.option('--overwrite/--no-overwrite', default=False, show_default=True,
               help='Whether to overwrite existing .tif files in the output folder.')
-def split_nd2_cli(input_path, output_path, bundle_axes, compression, overwrite):
+@click.option('--channel_order', type=str, default=None, callback=split_ws(item_type=int),
+              help='New channel order (whitespace-separated permutation of the original '
+                   'channel indices), e.g. --channel_order "4 2 0 1 3" to write the '
+                   'original channels 4, 2, 0, 1, 3 as channels 0, 1, 2, 3, 4. '
+                   'If omitted, the original channel order is kept.')
+def split_nd2_cli(input_path, output_path, bundle_axes, compression, overwrite, channel_order):
     """Split multi-FOV .nd2 file(s) into one .tif per field of view (point).
 
     Accepts either a single .nd2 file or a folder of .nd2 files. The output
@@ -89,6 +94,7 @@ def split_nd2_cli(input_path, output_path, bundle_axes, compression, overwrite):
             bundle_axes=bundle_axes,
             compression=compression,
             overwrite=overwrite,
+            channel_order=channel_order,
         )
     else:
         split_nd2_folder(
@@ -97,6 +103,7 @@ def split_nd2_cli(input_path, output_path, bundle_axes, compression, overwrite):
             bundle_axes=bundle_axes,
             compression=compression,
             overwrite=overwrite,
+            channel_order=channel_order,
         )
 
 
