@@ -7,8 +7,9 @@ import seaborn as sns
 
 from sys_micro_pytools.cli_utils import split_ws
 from sys_micro_pytools.df import plate_grid2table
-from sys_micro_pytools.visualize import get_nice_ticks
 from sys_micro_pytools.measure import calibration_curve, calculate_ic_value
+from sys_micro_pytools.measure.bliss import parse_exclude_pairs, run_bliss
+from sys_micro_pytools.visualize import get_nice_ticks
 
 
 @click.group()
@@ -388,6 +389,62 @@ def dose_response_cli(
         else:
             status = params.get('status', 'unknown_error')
             print(f"{compound}: Could not calculate IC{ic_percentile} ({status})")
+
+
+@measure.command(name="bliss-score")
+@click.option("-f", "--filename", type=click.Path(exists=True, dir_okay=False), required=True,
+              help="CSV with one row per replicate and the input and response columns.")
+@click.option("--input_vars", type=str, required=True,
+              callback=split_ws(item_type=str, expected_count=2),
+              help='Two input columns (dose or treatment axes), '
+                   'e.g. --input_vars "DrugA_uM DrugB_uM"')
+@click.option("--response_vars", type=str, required=True, callback=split_ws(item_type=str),
+              help='Response columns to score. Each is normalized to its own '
+                   'double-control mean, e.g. --response_vars "Count Intensity"')
+@click.option("--control_values", type=str, default="0 0", show_default=True,
+              callback=split_ws(item_type=str, expected_count=2),
+              help='Control level of each input variable, in the same order as '
+                   '--input_vars. Single-agent effects are taken from these edges.')
+@click.option("--exclude", multiple=True,
+              help="Drop rows matching a column=value pair. Repeat for more than one. "
+                   "A row is removed if it matches any pair. "
+                   'Example: --exclude Cell_type=dead --exclude "Name=T cell"')
+@click.option("-o", "--output_dir", type=click.Path(file_okay=False), required=True,
+              help="Directory for CSV and heatmap outputs. Created if it does not exist.")
+def bliss_score_cli(filename, input_vars, response_vars, control_values, exclude, output_dir):
+    """Bliss independence score for two inputs and one or more responses.
+
+    Viability is response / mean(response) on rows where both inputs are at
+    their control levels. Bliss excess is expected viability (E1 x E2) minus
+    observed viability. Positive excess is synergy for an inhibitory assay;
+    negative excess is antagonism.
+
+    The CSV must already contain one row per replicate. Aggregate field-level
+    counts before running this command.
+
+    Example:
+
+    python -m sys_micro_pytools.measure.cli bliss-score -f data.csv --input_vars "ETP_uM STAT5_uM" --response_vars "Count" --exclude Cell_type=dead -o out/bliss
+    """
+    if not response_vars:
+        raise click.UsageError("--response_vars must list at least one column.")
+    try:
+        pairs = parse_exclude_pairs(exclude)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="--exclude") from exc
+
+    df = pd.read_csv(filename)
+    try:
+        run_bliss(
+            df,
+            input_vars=input_vars,
+            response_vars=response_vars,
+            output_dir=output_dir,
+            exclude=pairs,
+            control_values=control_values,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 if __name__ == '__main__':
