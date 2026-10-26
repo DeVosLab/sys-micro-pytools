@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import List, Union
 import numpy as np
@@ -8,13 +7,7 @@ from matplotlib.colors import ListedColormap
 import seaborn as sns
 
 
-def extract_plate_index(name: str, pattern: str) -> str:
-    """ Extracts the plate index from a filename or sheet name using a regex pattern. """
-    match = re.search(pattern, name, re.IGNORECASE)
-    return match.group(1) if match else 'unknown'
-
-
-def process_layout(df, plate_index):
+def process_layout(df, plate_name):
     """ Processes individual layouts from a DataFrame. """
     start = 0
     layout_dfs = []
@@ -38,7 +31,7 @@ def process_layout(df, plate_index):
         melted_df.columns = ['row', 'col', 'value']
         melted_df['variable'] = variable_name
         melted_df['well'] = melted_df['row'] + melted_df['col'].astype(str).str.zfill(2)
-        melted_df['plate'] = plate_index
+        melted_df['plate'] = plate_name
         layout_dfs.append(melted_df)
         start = end + 1
     return pd.concat(layout_dfs, ignore_index=True)
@@ -174,36 +167,28 @@ def plate_grid2table(paths: Union[List[Union[str, Path]], Union[str, Path]], rem
         Between each layout, there is at least one blank row.
 
         Each row in the final dataframe corresponds to a well in the well plate and each column 
-        corresponds to a variable, with an additional 'plate' column specifying the plate index.
-        The plate index is extracted from either the filenames or the sheet name using the pattern "_plateX"
-        where X is an alphanumeric character or sequence of such characters.
+        corresponds to a variable, with an additional 'plate' column specifying the plate name.
+        For Excel files, the plate name is the sheet name. For CSV files, it is the filename
+        without its extension.
     '''
     if isinstance(paths, (str, Path)):
         paths = [paths]  # Ensure paths is always a list
 
     layout_dfs = []
-    plate_pattern = r"plate([A-Za-z0-9]+)"  # Regex to match alphanumeric characters after "plate"
 
     for path in paths:
         path = Path(path)
-        if Path(path).suffix in ['.xlsx', '.xls']:
+        if path.suffix in ['.xlsx', '.xls']:
             # Process as an Excel file possibly containing multiple sheets
             xls = pd.ExcelFile(path)
-            sheets_names = xls.sheet_names
-            for sheet in sheets_names:
+            for sheet in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet, header=None)
-                # Extract plate index from the sheet name if it exists, else from the filename
-                if re.search(plate_pattern, sheet, re.IGNORECASE):
-                    plate_index = extract_plate_index(sheet, plate_pattern)
-                elif len(sheets_names) == 1:
-                    plate_index = extract_plate_index(str(path), plate_pattern)
-                layout_df = process_layout(df, plate_index)
+                layout_df = process_layout(df, sheet)
                 layout_dfs.append(layout_df)
         else:
             # Process as a single CSV file or similar
-            plate_index = extract_plate_index(str(path), plate_pattern)
             df = pd.read_csv(path, header=None)
-            layout_df = process_layout(df, plate_index)
+            layout_df = process_layout(df, path.stem)
             layout_dfs.append(layout_df)
 
     # Concatenate all individual layout dataframes
